@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>유령 성의 탈출: 협동 에디션</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700&family=Black+Han+Sans&family=Gowun+Batang:wght@700&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #050000;
+            color: #ffcccc;
+            font-family: 'Nanum Gothic', sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 1000px;
+            height: 650px;
+            box-shadow: 0 0 50px #520000;
+            border: 4px solid #3d0a0a;
+            background-color: #1a0505;
+            overflow: hidden;
+            background: #110505; 
+        }
+
+        /* UI Overlays */
+        #ui-layer {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 20;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        .status-box {
+            background: rgba(0, 0, 0, 0.85);
+            padding: 8px 15px;
+            border: 2px solid #800000;
+            border-radius: 5px;
+            color: #fff;
+            font-size: 1rem;
+            font-family: 'Gowun Batang', serif;
+        }
+
+        /* Modals */
+        .modal {
+            display: none;
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: #1a1a1a;
+            border: 4px solid #a83232;
+            padding: 20px;
+            z-index: 100;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(255, 0, 0, 0.6);
+            width: 80%;
+            max-width: 600px;
+        }
+
+        .modal h2 {
+            color: #ff4d4d;
+            font-family: 'Gowun Batang', serif;
+            margin-top: 0;
+        }
+
+        .modal-content {
+            text-align: left;
+            margin: 15px 0;
+            background: #0f0f0f;
+            padding: 15px;
+            border: 1px solid #444;
+            max-height: 300px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            background: #5c0000;
+            color: white;
+            border: 1px solid #ff0000;
+            cursor: pointer;
+            font-family: 'Nanum Gothic', sans-serif;
+            margin: 5px;
+            transition: 0.2s;
+        }
+        .btn:hover { background: #800000; }
+        
+        .option-btn {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            background: #330000;
+            color: #ccc;
+            border: 1px solid #555;
+            cursor: pointer;
+            text-align: left;
+        }
+        .option-btn:hover { background: #550000; }
+
+        /* Login Screen */
+        #login-screen {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95);
+            z-index: 200;
+        }
+
+        #login-box {
+            background: #220505;
+            padding: 40px;
+            border: 4px solid #ff0000;
+            text-align: center;
+        }
+
+        input[type="text"] {
+            padding: 10px;
+            font-size: 1.1rem;
+            margin: 10px 0;
+            width: 200px;
+            text-align: center;
+        }
+        
+        /* Game Over Screen (No Reload) */
+        #gameover-screen {
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(50,0,0,0.9);
+            z-index: 190;
+        }
+
+        /* Scanlines */
+        .scanlines {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 10;
+            opacity: 0.3;
+        }
+
+        #hint-display {
+            color: #ffff00;
+            font-weight: bold;
+            font-size: 1.2rem;
+            margin-top: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" width="1000" height="650"></canvas>
+    <div class="scanlines"></div>
+
+    <!-- UI -->
+    <div id="ui-layer">
+        <div class="status-box">STAGE: <span id="stage-display">1</span> - <span id="stage-name">지하 감옥</span></div>
+        <div class="status-box" id="password-hint-box">획득한 암호 힌트: <span id="hint-text">없음</span></div>
+        <div class="status-box">목숨: <span id="lives-display">❤❤❤❤❤</span></div>
+    </div>
+
+    <!-- Login -->
+    <div id="login-screen">
+        <div id="login-box">
+            <h1 style="color:red; font-family:'Black Han Sans'; margin:0 0 20px 0; font-size: 3rem;">BLOOD CASTLE<br><span style="font-size:1.5rem">Co-op Escape</span></h1>
+            <p style="color:#ccc;">닉네임을 입력하고 입장하세요.</p>
+            <input type="text" id="nickname-input" placeholder="닉네임" maxlength="8">
+            <br>
+            <button class="btn" onclick="joinGame()">입장하기</button>
+            <p style="color:#888; font-size: 0.8rem; margin-top: 10px;">TIP: 몬스터의 갑작스러운 가시 공격을 조심하세요!</p>
+        </div>
+    </div>
+    
+    <!-- Game Over Screen -->
+    <div id="gameover-screen">
+        <h1 style="color:red; font-size:4rem; margin-bottom:20px;">GAME OVER</h1>
+        <p style="color:white; font-size:1.2rem; margin-bottom:30px;">당신의 영혼은 이곳에 갇혔습니다...</p>
+        <button class="btn" onclick="retryStage()" style="font-size:1.5rem; padding:15px 30px;">재도전 (Retry)</button>
+    </div>
+
+    <!-- Quiz Modal -->
+    <div id="quiz-modal" class="modal">
+        <h2 id="quiz-subject">문제</h2>
+        <div id="quiz-content" class="modal-content"></div>
+        <div id="quiz-options"></div>
+    </div>
+
+    <!-- Gate Modal (Password) -->
+    <div id="gate-modal" class="modal">
+        <h2>탈출구 봉인</h2>
+        <div class="modal-content">
+            이 문을 열려면 각 방에서 얻은 힌트를 조합하여 비밀번호를 입력해야 합니다.
+            <br><br>
+            <input type="text" id="gate-password" placeholder="비밀번호 입력" style="width:80%;">
+        </div>
+        <button class="btn" onclick="checkGatePassword()">문 열기</button>
+        <button class="btn" onclick="closeGateModal()">닫기</button>
+    </div>
+
+    <!-- Message Overlay -->
+    <div id="message-overlay" style="position:absolute; top:40%; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); padding:20px; border:2px solid red; color:white; display:none; z-index:150; font-size:1.5rem; text-align:center;"></div>
+</div>
+
+<!-- Firebase SDKs -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, query, orderBy, limit, serverTimestamp, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // --- Firebase Init ---
+    let firebaseConfig;
+    let appId;
+
+    // [중요] GitHub Pages 등 외부 호스팅 시 아래 'else' 블록의 주석을 해제하고 본인의 Firebase 설정값을 입력하세요.
+    if (typeof __firebase_config !== 'undefined') {
+        // 이 블록은 Canvas/Preview 환경에서 작동합니다.
+        firebaseConfig = JSON.parse(__firebase_config);
+        appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app';
+    } else {
+        // [여기에 본인의 Firebase 설정을 넣으세요]
+        firebaseConfig = {
+            apiKey: "AIzaSyBsPHiR88AhOo-mT3zbZZpGc-tiWcQLXPA",
+            authDomain: "escape-e3f1d.firebaseapp.com",
+            projectId: "escape-e3f1d",
+            storageBucket: "escape-e3f1d.firebasestorage.app",
+            messagingSenderId: "87061489514",
+            appId: "1:87061489514:web:8ad7144834626ac6f5e713",
+            measurementId: "G-0QLEQD1BS2"
+        };
+        // Firestore 경로에 사용할 앱 ID 설정
+        appId = "escape-e3f1d"; 
+    }
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    let currentUser = null;
+    let myPlayerId = null;
+    let nickname = "Player";
+
+    // --- Game Assets (Images) ---
+    function createSafeImage(src) {
+        const img = new Image();
+        img.crossOrigin = "Anonymous"; 
+        img.src = src;
+        return img;
+    }
+
+    const assets = {
+        player: createSafeImage("https://cdn-icons-png.flaticon.com/512/3408/3408545.png"), 
+        monsterFly: createSafeImage("https://cdn-icons-png.flaticon.com/512/3062/3062634.png"),
+        monsterCrawl: createSafeImage("https://cdn-icons-png.flaticon.com/512/2931/2931692.png"),
+        bg1: createSafeImage("https://images.unsplash.com/photo-1599587440406-d7607775531d?q=80&w=1080&auto=format&fit=crop"), // Dungeon
+        bg2: createSafeImage("https://images.unsplash.com/photo-1518640165980-d3e0e2aa6c1e?q=80&w=1080&auto=format&fit=crop"), // Hall
+        bg3: createSafeImage("https://images.unsplash.com/photo-1505506874110-6a7a69069a08?q=80&w=1080&auto=format&fit=crop"), // Spire
+        items: {
+            book: createSafeImage("https://cdn-icons-png.flaticon.com/512/3330/3330314.png"),
+            chest: createSafeImage("https://cdn-icons-png.flaticon.com/512/3014/3014798.png"),
+            potion: createSafeImage("https://cdn-icons-png.flaticon.com/512/867/867927.png")
+        }
+    };
+    
+    // --- Question Bank (6th Grade Curriculum - Expanded) ---
+    const questionBank = [
+        // 수학
+        { q: "[수학] 원의 넓이를 구하는 공식은?", options: ["반지름×반지름×원주율", "지름×원주율", "밑변×높이", "가로×세로"], a: 0 },
+        { q: "[수학] 지름이 10cm인 원의 원주는? (원주율: 3.14)", options: ["15.7cm", "31.4cm", "314cm", "10cm"], a: 1 },
+        { q: "[수학] 비례식 2:3 = 4:□ 에서 □는?", options: ["5", "6", "7", "8"], a: 1 },
+        { q: "[수학] 밑면의 반지름이 5, 높이가 10인 원기둥의 부피는? (원주율: 3)", options: ["250", "750", "150", "500"], a: 1 }, 
+        { q: "[수학] 직육면체의 겉넓이를 구하는 방법은?", options: ["여섯 면의 넓이의 합", "밑넓이 × 높이", "가로 × 세로", "밑변 × 높이 ÷ 2"], a: 0 },
+        { q: "[수학] 3.5 ÷ 0.5 의 값은?", options: ["5", "6", "7", "8"], a: 2 },
+        { q: "[수학] 원기둥의 전개도에서 옆면의 가로 길이는 무엇과 같은가?", options: ["밑면의 지름", "밑면의 원주", "원기둥의 높이", "밑면의 반지름"], a: 1 },
+        { q: "[수학] 비례배분: 사탕 10개를 2:3으로 나누면?", options: ["2개, 8개", "4개, 6개", "5개, 5개", "3개, 7개"], a: 1 },
+        { q: "[수학] 쌓기나무의 개수를 셀 때 보이지 않는 부분도 생각해야 한다. (O/X)", options: ["O", "X"], a: 0 },
+        { q: "[수학] 각기둥의 이름은 무엇에 따라 결정되는가?", options: ["높이", "옆면의 모양", "밑면의 모양", "모서리의 수"], a: 2 },
+        { q: "[수학] 5/6 ÷ 2/3 의 계산 결과는?", options: ["1과 1/4", "1과 1/2", "5/9", "5/4"], a: 0 },
+
+        // 사회
+        { q: "[사회] 우리나라의 입법 기관은?", options: ["국회", "법원", "정부", "경찰청"], a: 0 },
+        { q: "[사회] 세계에서 가장 큰 대륙은?", options: ["아시아", "아프리카", "유럽", "남아메리카"], a: 0 },
+        { q: "[사회] 지구촌 환경 문제를 해결하기 위한 국제 협약이 아닌 것은?", options: ["파리 협정", "도쿄 의정서", "람사르 협약", "강화도 조약"], a: 3 },
+        { q: "[사회] 국민의 권리를 침해받았을 때 구제를 요청하는 곳은?", options: ["헌법재판소", "국세청", "교육부", "우체국"], a: 0 },
+        { q: "[사회] 6.25 전쟁이 일어난 연도는?", options: ["1945년", "1950년", "1953년", "1960년"], a: 1 },
+        { q: "[사회] 민주주의의 기본 원칙이 아닌 것은?", options: ["국민 주권", "권력 분립", "입헌 주의", "독재 정치"], a: 3 },
+        { q: "[사회] 이웃 나라 중국의 수도는?", options: ["베이징", "상하이", "도쿄", "서울"], a: 0 },
+        { q: "[사회] 법을 만들고 고치는 일을 하는 곳은?", options: ["국회", "정부", "법원", "시청"], a: 0 },
+        { q: "[사회] 우리나라 경제 성장의 특징으로 알맞지 않은 것은?", options: ["수출 중심", "첨단 산업 발달", "농업 중심 사회 유지", "국민 소득 증가"], a: 2 },
+        { q: "[사회] 공정한 재판을 위해 법원은 다른 국가 기관의 간섭을 받지 않는다. 이것은?", options: ["사법권의 독립", "삼권 분립", "지방 자치", "국민 투표"], a: 0 },
+        
+        // 과학
+        { q: "[과학] 전기가 잘 통하는 물체를 무엇이라 하는가?", options: ["도체", "부도체", "반도체", "초전도체"], a: 0 },
+        { q: "[과학] 연소의 3요소가 아닌 것은?", options: ["탈 물질", "산소", "발화점 이상의 온도", "이산화탄소"], a: 3 },
+        { q: "[과학] 계절이 변하는 까닭은?", options: ["지구 자전축이 기울어진 채 공전해서", "태양과의 거리가 변해서", "지구가 자전해서", "달의 인력 때문에"], a: 0 },
+        { q: "[과학] 식물이 양분을 만드는 과정은?", options: ["광합성", "호흡", "증산 작용", "소화"], a: 0 },
+        { q: "[과학] 우리 몸에서 혈액을 순환시키는 기관은?", options: ["심장", "위", "폐", "간"], a: 0 },
+        { q: "[과학] 낮과 밤이 생기는 이유는?", options: ["지구의 자전", "지구의 공전", "달의 공전", "태양의 이동"], a: 0 },
+        { q: "[과학] 산소의 성질로 알맞은 것은?", options: ["색깔이 있다", "냄새가 있다", "다른 물질이 타는 것을 돕는다", "불을 끄는 성질이 있다"], a: 2 },
+        { q: "[과학] 북쪽 하늘에서 볼 수 있는 별자리는?", options: ["오리온자리", "전갈자리", "큰곰자리(북두칠성)", "사자자리"], a: 2 },
+        { q: "[과학] 우리 몸의 소화 기관이 아닌 것은?", options: ["위", "소장", "대장", "심장"], a: 3 },
+        { q: "[과학] 렌즈의 종류 중 빛을 모으는 성질이 있는 것은?", options: ["볼록 렌즈", "오목 렌즈", "평면 렌즈", "선글라스"], a: 0 },
+
+        // 영어
+        { q: "[영어] '나는 어제 학교에 갔다'의 올바른 영작은?", options: ["I go to school yesterday.", "I went to school yesterday.", "I will go to school.", "I am going to school."], a: 1 },
+        { q: "[영어] 미래를 나타내는 조동사는?", options: ["did", "will", "do", "can"], a: 1 },
+        { q: "[영어] '환경'을 영어로 하면?", options: ["Environment", "Government", "Apartment", "Department"], a: 0 },
+        { q: "[영어] 빈칸에 알맞은 말: He _____ happy.", options: ["is", "are", "am", "be"], a: 0 },
+        { q: "[영어] 'Museum'의 뜻은?", options: ["박물관", "도서관", "학교", "병원"], a: 0 },
+        { q: "[영어] 'What did you do?' 의 뜻은?", options: ["너는 무엇을 할 거니?", "너는 무엇을 했니?", "너는 무엇을 좋아하니?", "너는 어디에 가니?"], a: 1 },
+        { q: "[영어] 다음 중 과일이 아닌 것은?", options: ["Apple", "Banana", "Carrot", "Grape"], a: 2 },
+        { q: "[영어] 12월을 영어로?", options: ["October", "November", "December", "January"], a: 2 },
+        { q: "[영어] 'Can you help me?'에 대한 대답으로 알맞은 것은?", options: ["Yes, I can.", "No, I don't.", "Yes, I am.", "No, thank you."], a: 0 },
+        { q: "[영어] '치통'을 영어로 하면?", options: ["Headache", "Toothache", "Stomachache", "Cold"], a: 1 },
+
+        // 국어/상식
+        { q: "[국어] 주장을 뒷받침하는 내용을 무엇이라 하는가?", options: ["근거", "서론", "결론", "예시"], a: 0 },
+        { q: "[국어] '발이 넓다'의 관용적 의미는?", options: ["아는 사람이 많다", "발 사이즈가 크다", "잘 걷는다", "신발이 크다"], a: 0 },
+        { q: "[국어] 이야기를 이끌어가는 주체를 무엇이라 하는가?", options: ["서술자", "독자", "작가", "출판사"], a: 0 },
+        { q: "[국어] 훈민정음을 창제한 왕은?", options: ["세종대왕", "이순신", "정조", "영조"], a: 0 },
+        { q: "[상식] 3.1절은 몇 월 며칠인가?", options: ["3월 1일", "3월 3일", "3월 31일", "1월 3일"], a: 0 },
+        { q: "[국어] 광고의 목적은?", options: ["정보 전달 및 설득", "비판", "감동", "기록"], a: 0 },
+        { q: "[국어] '미역국을 먹다'의 관용적 의미는?", options: ["시험에 떨어지다", "생일을 맞다", "배가 고프다", "화를 내다"], a: 0 },
+        { q: "[국어] 글쓴이의 관점을 파악하는 방법으로 알맞지 않은 것은?", options: ["제목을 살펴본다", "표현을 살펴본다", "글쓴이의 나이를 추측한다", "글의 내용을 파악한다"], a: 2 },
+        { q: "[상식] 올림픽 오륜기의 색깔이 아닌 것은?", options: ["파랑", "노랑", "검정", "보라"], a: 3 },
+        { q: "[상식] 대한민국 국보 1호는?", options: ["숭례문(남대문)", "흥인지문", "석굴암", "다보탑"], a: 0 }
+    ];
+
+    // --- Game State ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    let gameState = 'LOGIN'; 
+    let stage = 1;
+    let lives = 5;
+    let collectedHints = []; 
+    let currentPassword = ""; 
+    let globalQuestionDeck = []; 
+
+    // Map & Physics
+    const TILE_SIZE = 50;
+    const GRAVITY = 0.6;
+    const JUMP_FORCE = -16; 
+    const SPEED = 5;
+    let map = [];
+    let cameraX = 0;
+
+    // Entities
+    let player = { 
+        x: 50, y: 200, w: 40, h: 40, 
+        vx: 0, vy: 0, 
+        grounded: false, facing: 1,
+        invulnerable: 0 
+    };
+    let otherPlayers = {}; 
+    let monsters = [];
+    let puzzles = [];
+
+    // --- Word Bank ---
+    const wordBank = {
+        1: ["HOPE", "LOVE", "LIFE", "KING", "LUCK", "STAR", "MOON", "LION", "GOLD", "WISH"], 
+        2: ["BRAVE", "DREAM", "WORLD", "PEACE", "EARTH", "HAPPY", "SMILE", "WATER", "MUSIC", "START"], 
+        3: ["TRUTH", "POWER", "LIGHT", "SPACE", "SMART", "HEART", "GLORY", "TRUST", "PRIDE", "FINAL"] 
+    };
+
+    // --- Puzzle Setup Data ---
+    const stageLayouts = {
+        1: {
+            name: "지하 감옥 (Dungeon)",
+            bg: assets.bg1,
+            puzzleSpots: [
+                { type: 'book', x: 200, y: 300 },
+                { type: 'chest', x: 600, y: 150 },
+                { type: 'potion', x: 1000, y: 400 },
+                { type: 'book', x: 1400, y: 250 }
+            ]
+        },
+        2: {
+            name: "유령 연회장 (Grand Hall)",
+            bg: assets.bg2,
+            puzzleSpots: [
+                { type: 'book', x: 300, y: 200 },
+                { type: 'chest', x: 800, y: 100 },
+                { type: 'potion', x: 1200, y: 300 },
+                { type: 'book', x: 1600, y: 150 },
+                { type: 'chest', x: 2000, y: 250 }
+            ]
+        },
+        3: {
+            name: "검은 첨탑 (Dark Spire)",
+            bg: assets.bg3,
+            puzzleSpots: [
+                { type: 'book', x: 400, y: 400 },
+                { type: 'chest', x: 800, y: 200 },
+                { type: 'potion', x: 1200, y: 450 },
+                { type: 'book', x: 1600, y: 150 },
+                { type: 'chest', x: 1900, y: 300 }
+            ]
+        }
+    };
+
+    // --- Helper: Shuffle Array ---
+    function shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    // --- Auth & Lobby ---
+    window.joinGame = async () => {
+        const input = document.getElementById('nickname-input');
+        if(!input.value) return alert("닉네임을 입력하세요.");
+        nickname = input.value;
+        
+        globalQuestionDeck = shuffle([...questionBank]);
+
+        try {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("접속 오류. Firebase 설정이 필요합니다.");
+        }
+    };
+
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            currentUser = user;
+            myPlayerId = user.uid;
+            document.getElementById('login-screen').style.display = 'none';
+            setupMultiplayer();
+            loadStage(1);
+            startGameLoop();
+        }
+    });
+
+    // --- Multiplayer Logic ---
+    function setupMultiplayer() {
+        const playersRef = collection(db, 'artifacts', appId, 'public', 'data', 'players');
+        const myRef = doc(playersRef, myPlayerId);
+
+        setInterval(async () => {
+            if (gameState !== 'PLAYING') return;
+            try {
+                await setDoc(myRef, {
+                    x: Math.round(player.x),
+                    y: Math.round(player.y),
+                    stage: stage,
+                    nickname: nickname,
+                    facing: player.facing,
+                    lastUpdate: serverTimestamp()
+                });
+            } catch (e) { console.warn("Sync error", e); }
+        }, 100); 
+
+        onSnapshot(playersRef, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                const data = change.doc.data();
+                if (change.doc.id === myPlayerId) return;
+                
+                if (change.type === "added" || change.type === "modified") {
+                    if(data.stage === stage) {
+                        otherPlayers[change.doc.id] = data;
+                    } else {
+                        delete otherPlayers[change.doc.id];
+                    }
+                }
+                if (change.type === "removed") {
+                    delete otherPlayers[change.doc.id];
+                }
+            });
+        });
+    }
+
+    // --- Game Logic ---
+    function loadStage(lvl) {
+        stage = lvl;
+        gameState = 'PLAYING';
+        collectedHints = [];
+        player.x = 100; player.y = 200;
+        player.vx = 0; player.vy = 0;
+        player.invulnerable = 120; 
+        
+        const currentLayout = stageLayouts[stage];
+        document.getElementById('stage-display').innerText = stage;
+        document.getElementById('stage-name').innerText = currentLayout.name;
+        document.getElementById('gameover-screen').style.display = 'none';
+        updateHintUI();
+        updateLives();
+
+        generateMap(lvl);
+
+        const words = wordBank[lvl];
+        currentPassword = words[Math.floor(Math.random() * words.length)];
+
+        const spots = currentLayout.puzzleSpots;
+        
+        let startIndex = 0;
+        if (lvl === 2) startIndex = 4;
+        if (lvl === 3) startIndex = 9;
+
+        puzzles = spots.map((spot, index) => {
+            const deckIndex = (startIndex + index) % globalQuestionDeck.length;
+            const qData = globalQuestionDeck[deckIndex];
+            
+            return {
+                ...spot,
+                q: qData.q,
+                options: qData.options,
+                a: qData.a,
+                hint: currentPassword[index] || "?", 
+                solved: false
+            };
+        });
+        
+        // --- Enhanced Monster Generation ---
+        monsters = [];
+        const monsterCount = 5 + lvl * 2;
+        const width = map[0].length * TILE_SIZE;
+
+        for(let i=0; i<monsterCount; i++) {
+            const type = Math.random() > 0.5 ? 'fly' : 'crawl';
+            const m = {
+                x: 400 + Math.random() * (width - 600),
+                y: type === 'fly' ? 100 + Math.random() * 200 : 0, 
+                w: 40, h: 40,
+                vx: 2, vy: 0,
+                type: type,
+                attackTimer: 100 + Math.random() * 300, 
+                isAttacking: false,
+                attackDuration: 0,
+                patrolStart: 0, patrolEnd: width
+            };
+            monsters.push(m);
+        }
+
+        showMessage(`STAGE ${lvl} 시작!\n힌트를 모아 암호를 해독하세요.`);
+    }
+    
+    window.retryStage = () => {
+        lives = 5;
+        loadStage(stage);
+    }
+
+    // --- Dynamic Map Generation per Stage ---
+    function generateMap(lvl) {
+        map = [];
+        const width = 60; 
+        const height = 13;
+        
+        for(let y=0; y<height; y++) {
+            let row = [];
+            for(let x=0; x<width; x++) {
+                if(y === height-1) row.push(1); 
+                else if(x===0 || x===width-1) row.push(1); 
+                else row.push(0);
+            }
+            map.push(row);
+        }
+
+        if (lvl === 1) {
+            addPlatform(5, 9, 4);
+            addPlatform(12, 7, 5);
+            addPlatform(20, 10, 3);
+            addPlatform(25, 6, 6);
+            addPlatform(35, 8, 5);
+            addPlatform(42, 5, 4);
+            addPlatform(50, 9, 3);
+        } 
+        else if (lvl === 2) {
+            for(let x=15; x<20; x++) map[height-1][x] = 0; // Pit
+            for(let x=35; x<40; x++) map[height-1][x] = 0; // Pit
+            addPlatform(8, 8, 3);
+            addPlatform(15, 6, 3);
+            addPlatform(22, 9, 4);
+            addPlatform(28, 5, 4);
+            addPlatform(36, 6, 3);
+            addPlatform(45, 8, 5);
+            addPlatform(52, 5, 3);
+        } 
+        else if (lvl === 3) {
+            for(let x=10; x<50; x++) if(x%5 !== 0) map[height-1][x] = 0; 
+            addPlatform(5, 10, 2);
+            addPlatform(10, 8, 2);
+            addPlatform(15, 6, 2);
+            addPlatform(20, 4, 2);
+            addPlatform(25, 7, 2);
+            addPlatform(30, 10, 2);
+            addPlatform(35, 5, 2);
+            addPlatform(40, 8, 2);
+            addPlatform(45, 4, 2);
+            addPlatform(50, 7, 2);
+        }
+
+        map[height-2][width-3] = 9;
+        map[height-3][width-3] = 9;
+
+        function addPlatform(x, y, w) {
+            for(let i=0; i<w; i++) if(x+i < width-1) map[y][x+i] = 1;
+        }
+    }
+
+    function startGameLoop() {
+        requestAnimationFrame(gameLoop);
+    }
+
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    function update() {
+        if(gameState !== 'PLAYING') return;
+
+        const keys = window.keys || {};
+        if (keys['ArrowLeft']) { player.vx = -SPEED; player.facing = -1; }
+        else if (keys['ArrowRight']) { player.vx = SPEED; player.facing = 1; }
+        else { player.vx = 0; }
+
+        if (keys['ArrowUp'] && player.grounded) {
+            player.vy = JUMP_FORCE;
+            player.grounded = false;
+        }
+
+        if (keys['Space']) checkInteraction();
+
+        player.vy += GRAVITY;
+        player.x += player.vx;
+        checkCollision(player, 'x');
+        player.y += player.vy;
+        player.grounded = false;
+        checkCollision(player, 'y');
+        
+        checkPlayerCollision();
+
+        if (player.invulnerable > 0) player.invulnerable--;
+
+        if(player.y > 800) { 
+            takeDamage("추락했습니다!");
+            player.x = 100; player.y = 200; player.vy = 0;
+        }
+
+        monsters.forEach(m => {
+            m.x += m.vx;
+            if(Math.random() < 0.01) m.vx *= -1;
+            
+            if (m.type === 'crawl') {
+                m.vy += GRAVITY;
+                m.y += m.vy;
+                const left = Math.floor(m.x / TILE_SIZE);
+                const right = Math.floor((m.x + m.w) / TILE_SIZE);
+                const bottom = Math.floor((m.y + m.h) / TILE_SIZE);
+                const top = Math.floor(m.y / TILE_SIZE);
+                if (m.vy > 0 && (isSolid(left, bottom) || isSolid(right, bottom))) {
+                    m.y = bottom * TILE_SIZE - m.h;
+                    m.vy = 0;
+                }
+                const wallSide = m.vx > 0 ? right : left;
+                if (isSolid(wallSide, Math.floor((m.y + m.h/2)/TILE_SIZE))) {
+                    m.vx *= -1;
+                }
+            } else {
+                if (m.x < 0 || m.x > map[0].length * TILE_SIZE) m.vx *= -1;
+            }
+
+            if (m.isAttacking) {
+                m.attackDuration--;
+                if (m.attackDuration <= 0) {
+                    m.isAttacking = false;
+                    m.attackTimer = 200 + Math.random() * 300; 
+                }
+                
+                const dist = Math.hypot((player.x + 20) - (m.x + 20), (player.y + 20) - (m.y + 20));
+                if (dist < 100) { 
+                    takeDamage("가시에 찔렸습니다!");
+                    player.vx = (player.x < m.x) ? -15 : 15;
+                    player.vy = -10;
+                }
+            } else {
+                m.attackTimer--;
+                if (m.attackTimer <= 0) {
+                    m.isAttacking = true;
+                    m.attackDuration = 30; 
+                    if (Math.hypot(player.x - m.x, player.y - m.y) < 400) {
+                        cameraX += (Math.random() - 0.5) * 10; 
+                    }
+                }
+
+                if(Math.abs(player.x - m.x) < 30 && Math.abs(player.y - m.y) < 30) {
+                    takeDamage("괴물에게 닿았습니다!");
+                    player.vy = -10;
+                    player.vx = (player.x < m.x) ? -10 : 10;
+                }
+            }
+        });
+
+        cameraX += (player.x - canvas.width/2 - cameraX) * 0.1;
+        const maxCam = map[0].length * TILE_SIZE - canvas.width;
+        cameraX = Math.max(0, Math.min(cameraX, maxCam));
+    }
+
+    function takeDamage(msg) {
+        if (player.invulnerable > 0) return; 
+
+        lives--;
+        updateLives();
+        player.invulnerable = 120; 
+        showMessage(msg);
+        
+        if(lives <= 0) {
+            gameState = 'GAMEOVER';
+            document.getElementById('gameover-screen').style.display = 'flex';
+        }
+    }
+
+    function checkCollision(ent, axis) {
+        const left = Math.floor(ent.x / TILE_SIZE);
+        const right = Math.floor((ent.x + ent.w - 1) / TILE_SIZE);
+        const top = Math.floor(ent.y / TILE_SIZE);
+        const bottom = Math.floor((ent.y + ent.h - 1) / TILE_SIZE);
+
+        if (axis === 'x') {
+            if (isSolid(left, top) || isSolid(right, top) || 
+                isSolid(left, bottom) || isSolid(right, bottom)) {
+                ent.x -= ent.vx;
+            }
+        } else {
+            if (ent.vy > 0 && (isSolid(left, bottom) || isSolid(right, bottom))) {
+                ent.y = bottom * TILE_SIZE - ent.h;
+                ent.vy = 0;
+                ent.grounded = true;
+            } else if (ent.vy < 0 && (isSolid(left, top) || isSolid(right, top))) {
+                ent.y = (top + 1) * TILE_SIZE;
+                ent.vy = 0;
+            }
+        }
+    }
+
+    function checkPlayerCollision() {
+        for (const pid in otherPlayers) {
+            const other = otherPlayers[pid];
+            if (player.x < other.x + 40 && player.x + 40 > other.x &&
+                player.y + 40 > other.y && player.y < other.y + 40) {
+                
+                if (player.vy >= 0 && (player.y + 40) <= (other.y + 20)) {
+                    player.y = other.y - 40; 
+                    player.vy = 0;
+                    player.grounded = true;
+                }
+            }
+        }
+    }
+
+    function isSolid(x, y) {
+        if(y < 0 || y >= map.length || x < 0 || x >= map[0].length) return false;
+        return map[y][x] === 1;
+    }
+
+    function checkInteraction() {
+        const gateX = (map[0].length - 3) * TILE_SIZE;
+        if (Math.abs(player.x - gateX) < 100) {
+            document.getElementById('gate-modal').style.display = 'block';
+            gameState = 'MODAL';
+            return;
+        }
+
+        let target = null;
+        for(let p of puzzles) {
+            if(p.solved) continue;
+            if(Math.abs(player.x - p.x) < 60 && Math.abs(player.y - p.y) < 60) {
+                target = p;
+                break;
+            }
+        }
+        if(target) openQuiz(target);
+    }
+
+    window.openQuiz = (q) => {
+        gameState = 'QUIZ';
+        document.getElementById('quiz-modal').style.display = 'block';
+        document.getElementById('quiz-content').innerText = q.q;
+        const opts = document.getElementById('quiz-options');
+        opts.innerHTML = '';
+        q.options.forEach((o, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.innerText = `${i+1}. ${o}`;
+            btn.onclick = () => answerQuiz(q, i);
+            opts.appendChild(btn);
+        });
+    };
+
+    window.answerQuiz = (q, idx) => {
+        document.getElementById('quiz-modal').style.display = 'none';
+        if(idx === q.a) {
+            q.solved = true;
+            collectedHints.push(q.hint);
+            updateHintUI();
+            showMessage(`정답! 힌트 '${q.hint}' 획득!`);
+        } else {
+            takeDamage("오답입니다! 생명이 줄어듭니다.");
+        }
+        gameState = 'PLAYING';
+    };
+
+    window.checkGatePassword = () => {
+        const input = document.getElementById('gate-password').value.toUpperCase().trim();
+        const correct = currentPassword;
+        
+        if(input === correct) {
+            document.getElementById('gate-modal').style.display = 'none';
+            if(stage === 3) {
+                alert("축하합니다! 성을 완전히 탈출했습니다!");
+                location.reload();
+            } else {
+                showMessage("문이 열렸습니다! 다음 층으로 이동합니다.");
+                setTimeout(() => loadStage(stage + 1), 2000);
+            }
+        } else {
+            alert("비밀번호가 틀렸습니다.");
+            takeDamage("잘못된 암호입니다!");
+            document.getElementById('gate-modal').style.display = 'none';
+            gameState = 'PLAYING';
+        }
+    };
+
+    window.closeGateModal = () => {
+        document.getElementById('gate-modal').style.display = 'none';
+        gameState = 'PLAYING';
+    };
+
+    function updateHintUI() {
+        document.getElementById('hint-text').innerText = collectedHints.join(" - ") || "없음";
+    }
+
+    function updateLives() {
+        let h = "";
+        for(let i=0; i<lives; i++) h += "❤";
+        for(let i=lives; i<5; i++) h += "🖤";
+        document.getElementById('lives-display').innerText = h;
+    }
+
+    function showMessage(txt) {
+        const el = document.getElementById('message-overlay');
+        el.innerText = txt;
+        el.style.display = 'block';
+        setTimeout(() => el.style.display = 'none', 2000);
+    }
+
+    function safeDrawImage(ctx, img, x, y, w, h, fallbackColor = '#555') {
+        if (img && img.complete && img.naturalWidth !== 0) {
+            try {
+                ctx.drawImage(img, x, y, w, h);
+            } catch (e) {
+                drawFallback(ctx, x, y, w, h, fallbackColor);
+            }
+        } else {
+            drawFallback(ctx, x, y, w, h, fallbackColor);
+        }
+    }
+
+    function drawFallback(ctx, x, y, w, h, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, w, h);
+    }
+
+    function draw() {
+        const currentLayout = stageLayouts[stage];
+        const bg = currentLayout ? currentLayout.bg : null;
+
+        if (bg && bg.complete && bg.naturalWidth !== 0) {
+            ctx.drawImage(bg, 0, 0, canvas.width, canvas.height);
+        } else {
+            ctx.fillStyle = '#110505';
+            ctx.fillRect(0,0,canvas.width, canvas.height);
+        }
+        
+        ctx.fillStyle = 'rgba(20, 0, 0, 0.5)';
+        ctx.fillRect(0,0,canvas.width, canvas.height);
+
+        ctx.save();
+        ctx.translate(-Math.floor(cameraX), 0);
+
+        const width = map[0].length;
+        const height = map.length;
+        const startX = Math.floor(cameraX / TILE_SIZE);
+        const endX = startX + (canvas.width / TILE_SIZE) + 2;
+
+        for(let y=0; y<height; y++) {
+            for(let x=startX; x<=endX; x++) {
+                if(x < 0 || x >= width) continue;
+                const tile = map[y][x];
+                if(tile === 1) {
+                    ctx.fillStyle = '#2b0a0a';
+                    ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    ctx.strokeStyle = '#551111';
+                    ctx.strokeRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                } else if (tile === 9) {
+                    ctx.fillStyle = 'black';
+                    ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE*2);
+                    ctx.font = '30px Arial';
+                    ctx.fillStyle = 'red';
+                    ctx.fillText('🔒', x*TILE_SIZE+10, y*TILE_SIZE+40);
+                }
+            }
+        }
+
+        puzzles.forEach(p => {
+            if(p.solved) return;
+            const img = assets.items[p.type] || assets.items.book;
+            const bounce = Math.sin(Date.now() / 300) * 5;
+            safeDrawImage(ctx, img, p.x, p.y + bounce, 40, 40, 'gold');
+
+            if(Math.abs(player.x - p.x) < 60 && Math.abs(player.y - p.y) < 60) {
+                ctx.fillStyle = 'white';
+                ctx.font = '14px sans-serif';
+                ctx.fillText("SPACE", p.x, p.y - 10);
+            }
+        });
+
+        monsters.forEach(m => {
+            ctx.save();
+            let filterColor = null;
+            if (m.isAttacking) {
+                ctx.beginPath();
+                ctx.arc(m.x + m.w/2, m.y + m.h/2, 100, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.4)'; 
+                ctx.fill();
+                
+                ctx.strokeStyle = 'red';
+                ctx.lineWidth = 4;
+                for(let i=0; i<8; i++) {
+                    const angle = (Date.now() / 100) + (i * Math.PI / 4);
+                    const cx = m.x + m.w/2;
+                    const cy = m.y + m.h/2;
+                    ctx.beginPath();
+                    ctx.moveTo(cx, cy);
+                    ctx.lineTo(cx + Math.cos(angle) * 100, cy + Math.sin(angle) * 100);
+                    ctx.stroke();
+                }
+                filterColor = 'red';
+            } else if (m.attackTimer < 60) {
+                const shake = (Math.random() - 0.5) * 5;
+                ctx.translate(shake, shake);
+                filterColor = 'orange';
+                
+                ctx.fillStyle = 'red';
+                ctx.font = '20px sans-serif';
+                ctx.fillText("!!!", m.x+m.w/2, m.y - 10);
+            }
+
+            const mImg = m.type === 'fly' ? assets.monsterFly : assets.monsterCrawl;
+
+            if(m.vx > 0) {
+                 ctx.translate(m.x + m.w, m.y);
+                 ctx.scale(-1, 1);
+                 safeDrawImage(ctx, mImg, 0, 0, m.w, m.h, filterColor || 'green');
+            } else {
+                 safeDrawImage(ctx, mImg, m.x, m.y, m.w, m.h, filterColor || 'green');
+            }
+            ctx.restore();
+        });
+
+        Object.values(otherPlayers).forEach(p => {
+            ctx.globalAlpha = 0.8;
+            drawAvatar(p.x, p.y, p.facing, assets.player, p.nickname, false);
+            ctx.globalAlpha = 1.0;
+        });
+
+        if (player.invulnerable <= 0 || Math.floor(Date.now() / 100) % 2 === 0) {
+            drawAvatar(player.x, player.y, player.facing, assets.player, nickname, true);
+        }
+
+        ctx.restore();
+    }
+
+    function drawAvatar(x, y, facing, imgObj, name, isMe) {
+        ctx.save();
+        ctx.font = 'bold 12px "Nanum Gothic"';
+        ctx.fillStyle = isMe ? '#ffff00' : 'white';
+        ctx.textAlign = 'center';
+        ctx.fillText(name, x + 20, y - 10);
+
+        if(facing === -1) {
+            ctx.translate(x + 40, y);
+            ctx.scale(-1, 1);
+            safeDrawImage(ctx, imgObj, 0, 0, 40, 40, 'blue');
+        } else {
+            safeDrawImage(ctx, imgObj, x, y, 40, 40, 'blue');
+        }
+        ctx.restore();
+    }
+
+    window.keys = {};
+    window.addEventListener('keydown', e => window.keys[e.code] = true);
+    window.addEventListener('keyup', e => window.keys[e.code] = false);
+
+</script>
+</body>
+</html>
