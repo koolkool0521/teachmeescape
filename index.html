@@ -193,7 +193,7 @@
             <input type="text" id="nickname-input" placeholder="닉네임" maxlength="8">
             <br>
             <button class="btn" onclick="joinGame()">입장하기</button>
-            <p style="color:#888; font-size: 0.8rem; margin-top: 10px;">TIP: 몬스터의 갑작스러운 가시 공격을 조심하세요!</p>
+            <p style="color:#888; font-size: 0.8rem; margin-top: 10px;">TIP: 플레이어끼리 겹치지 않습니다. 길을 막지 마세요!</p>
         </div>
     </div>
     
@@ -237,24 +237,20 @@
     let firebaseConfig;
     let appId;
 
-    // [중요] GitHub Pages 등 외부 호스팅 시 아래 'else' 블록의 주석을 해제하고 본인의 Firebase 설정값을 입력하세요.
     if (typeof __firebase_config !== 'undefined') {
-        // 이 블록은 Canvas/Preview 환경에서 작동합니다.
         firebaseConfig = JSON.parse(__firebase_config);
         appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app';
     } else {
         // [여기에 본인의 Firebase 설정을 넣으세요]
         firebaseConfig = {
-            apiKey: "AIzaSyBsPHiR88AhOo-mT3zbZZpGc-tiWcQLXPA",
-            authDomain: "escape-e3f1d.firebaseapp.com",
-            projectId: "escape-e3f1d",
-            storageBucket: "escape-e3f1d.firebasestorage.app",
-            messagingSenderId: "87061489514",
-            appId: "1:87061489514:web:8ad7144834626ac6f5e713",
-            measurementId: "G-0QLEQD1BS2"
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
         };
-        // Firestore 경로에 사용할 앱 ID 설정
-        appId = "escape-e3f1d"; 
+        appId = "default-app"; 
     }
 
     const app = initializeApp(firebaseConfig);
@@ -656,14 +652,18 @@
         if (keys['Space']) checkInteraction();
 
         player.vy += GRAVITY;
+
+        // ★ [수정] X축 이동 및 플레이어끼리 충돌 처리
         player.x += player.vx;
         checkCollision(player, 'x');
+        checkPlayerCollision('x');
+
+        // ★ [수정] Y축 이동 및 플레이어끼리 충돌 처리
         player.y += player.vy;
         player.grounded = false;
         checkCollision(player, 'y');
+        checkPlayerCollision('y');
         
-        checkPlayerCollision();
-
         if (player.invulnerable > 0) player.invulnerable--;
 
         if(player.y > 800) { 
@@ -767,16 +767,47 @@
         }
     }
 
-    function checkPlayerCollision() {
+    // ★ [핵심] 플레이어 간 충돌 처리 로직 (가로막기, 밟기)
+    function checkPlayerCollision(axis) {
         for (const pid in otherPlayers) {
             const other = otherPlayers[pid];
-            if (player.x < other.x + 40 && player.x + 40 > other.x &&
-                player.y + 40 > other.y && player.y < other.y + 40) {
+            // 다른 플레이어도 40x40 크기로 가정
+            const otherW = 40;
+            const otherH = 40;
+
+            // AABB(사각형) 충돌 검사
+            if (player.x < other.x + otherW && player.x + player.w > other.x &&
+                player.y < other.y + otherH && player.y + player.h > other.y) {
                 
-                if (player.vy >= 0 && (player.y + 40) <= (other.y + 20)) {
-                    player.y = other.y - 40; 
-                    player.vy = 0;
-                    player.grounded = true;
+                if (axis === 'x') {
+                    // X축 충돌: 옆으로 밀어내기 (가로막기)
+                    if (player.vx > 0) { 
+                        // 오른쪽으로 가다가 왼쪽 면에 부딪힘
+                        player.x = other.x - player.w;
+                    } else if (player.vx < 0) {
+                        // 왼쪽으로 가다가 오른쪽 면에 부딪힘
+                        player.x = other.x + otherW;
+                    } else {
+                        // 멈춰있는데 다른 플레이어가 겹친 경우 (밀리기 효과)
+                        const distLeft = (player.x + player.w) - other.x;
+                        const distRight = (other.x + otherW) - player.x;
+                        if (distLeft < distRight) player.x = other.x - player.w;
+                        else player.x = other.x + otherW;
+                    }
+                    player.vx = 0; // 가로막혔으므로 속도 0
+                } 
+                else if (axis === 'y') {
+                    // Y축 충돌: 밟거나 머리 부딪히기
+                    if (player.vy > 0) { 
+                        // 아래로 떨어지다가 윗면에 닿음 (밟기)
+                        player.y = other.y - player.h;
+                        player.vy = 0;
+                        player.grounded = true;
+                    } else if (player.vy < 0) {
+                        // 점프하다가 아랫면에 닿음 (머리 쿵)
+                        player.y = other.y + otherH;
+                        player.vy = 0;
+                    }
                 }
             }
         }
