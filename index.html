@@ -3,1072 +3,806 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>유령 성의 탈출: 협동 에디션</title>
+    <title>Shadow School: 6학년의 악몽 (Updated)</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700&family=Black+Han+Sans&family=Gowun+Batang:wght@700&display=swap');
-
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #050000;
-            color: #ffcccc;
-            font-family: 'Nanum Gothic', sans-serif;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            user-select: none;
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', Courier, monospace; user-select: none; }
+        
+        /* UI 레이어 */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        
+        /* 십자선 */
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 8px; height: 8px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 4px white;
         }
 
-        #game-container {
-            position: relative;
-            width: 1000px;
-            height: 650px;
-            box-shadow: 0 0 50px #520000;
-            border: 4px solid #3d0a0a;
-            background-color: #1a0505;
-            overflow: hidden;
-            background: #110505; 
-        }
-
-        /* UI Overlays */
-        #ui-layer {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            right: 10px;
-            display: flex;
-            justify-content: space-between;
-            pointer-events: none;
-            z-index: 20;
+        /* 상태 표시줄 */
+        #hud {
+            position: absolute; top: 20px; left: 20px;
+            color: #ff3333; font-size: 1.5rem; font-weight: bold;
             text-shadow: 2px 2px 0 #000;
         }
-
-        .status-box {
-            background: rgba(0, 0, 0, 0.85);
-            padding: 8px 15px;
-            border: 2px solid #800000;
-            border-radius: 5px;
-            color: #fff;
-            font-size: 1rem;
-            font-family: 'Gowun Batang', serif;
+        #timer-box {
+            position: absolute; top: 20px; right: 20px;
+            color: #fff; font-size: 2rem; font-weight: bold;
+            text-shadow: 0 0 10px red;
         }
 
-        /* Modals */
-        .modal {
-            display: none;
-            position: absolute;
-            top: 50%; left: 50%;
+        /* 상호작용 텍스트 */
+        #interact-msg {
+            position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%);
+            color: #fff; font-size: 1.2rem; display: none; text-shadow: 1px 1px 2px black;
+        }
+
+        /* 퀴즈 모달 */
+        #quiz-modal {
+            display: none; position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            background: #1a1a1a;
-            border: 4px solid #a83232;
-            padding: 20px;
-            z-index: 100;
+            background: rgba(20, 10, 5, 0.95);
+            border: 4px solid #3e2723;
+            padding: 20px; width: 400px;
+            color: #d7ccc8; pointer-events: auto;
             text-align: center;
-            box-shadow: 0 0 50px rgba(255, 0, 0, 0.6);
-            width: 80%;
-            max-width: 600px;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
         }
+        #quiz-modal h2 { margin-top: 0; color: #ff5555; border-bottom: 1px solid #5d4037; padding-bottom: 10px; }
+        .quiz-btn {
+            display: block; width: 100%; padding: 10px; margin: 5px 0;
+            background: #3e2723; color: #d7ccc8; border: 1px solid #5d4037;
+            cursor: pointer; text-align: left; font-weight: bold;
+        }
+        .quiz-btn:hover { background: #5d4037; color: #fff; }
 
-        .modal h2 {
-            color: #ff4d4d;
-            font-family: 'Gowun Batang', serif;
-            margin-top: 0;
+        /* 시작 화면 */
+        #start-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #050505; color: #a00;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            z-index: 100; pointer-events: auto;
+            background-image: repeating-linear-gradient(0deg, transparent, transparent 1px, #110000 1px, #110000 2px);
         }
-
-        .modal-content {
-            text-align: left;
-            margin: 15px 0;
-            background: #0f0f0f;
-            padding: 15px;
-            border: 1px solid #444;
-            max-height: 300px;
-            overflow-y: auto;
-            line-height: 1.6;
-        }
-
-        .btn {
-            padding: 10px 20px;
-            background: #5c0000;
-            color: white;
-            border: 1px solid #ff0000;
-            cursor: pointer;
-            font-family: 'Nanum Gothic', sans-serif;
-            margin: 5px;
-            transition: 0.2s;
-        }
-        .btn:hover { background: #800000; }
-        
-        .option-btn {
-            display: block;
-            width: 100%;
-            padding: 10px;
-            margin: 5px 0;
-            background: #330000;
-            color: #ccc;
-            border: 1px solid #555;
-            cursor: pointer;
-            text-align: left;
-        }
-        .option-btn:hover { background: #550000; }
-
-        /* Login Screen */
-        #login-screen {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.95);
-            z-index: 200;
-        }
-
-        #login-box {
-            background: #220505;
-            padding: 40px;
-            border: 4px solid #ff0000;
-            text-align: center;
-        }
-
-        input[type="text"] {
-            padding: 10px;
-            font-size: 1.1rem;
-            margin: 10px 0;
-            width: 200px;
-            text-align: center;
-        }
-        
-        /* Game Over Screen (No Reload) */
-        #gameover-screen {
-            display: none;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(50,0,0,0.9);
-            z-index: 190;
-        }
-
-        /* Scanlines */
-        .scanlines {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(to bottom, rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%);
-            background-size: 100% 4px;
-            pointer-events: none;
-            z-index: 10;
-            opacity: 0.3;
-        }
-
-        #hint-display {
-            color: #ffff00;
+        h1 { font-size: 4rem; text-shadow: 0 0 20px red; margin-bottom: 10px; font-weight: 900; }
+        .btn-start {
+            padding: 15px 40px; font-size: 2rem;
+            background: #200; color: #f00; border: 2px solid #f00;
+            cursor: pointer; margin-top: 20px;
+            font-family: 'Courier New', Courier, monospace;
             font-weight: bold;
-            font-size: 1.2rem;
-            margin-top: 10px;
-            text-align: center;
+        }
+        .btn-start:hover { background: #500; color: #fff; box-shadow: 0 0 20px red; }
+
+        /* 게임 오버 화면 */
+        #gameover-screen {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(20, 0, 0, 0.95); z-index: 200; pointer-events: auto;
+            flex-direction: column; justify-content: center; align-items: center;
+            color: white; text-align: center;
+        }
+        #gameover-msg { font-size: 5rem; color: red; font-family: 'Chiller', serif; text-shadow: 0 0 30px black; }
+        
+        .btn-group { display: flex; gap: 20px; margin-top: 30px; }
+        .btn-retry { padding: 15px 30px; font-size: 1.5rem; background: #004400; color: #0f0; border: 2px solid #0f0; cursor: pointer; }
+        .btn-giveup { padding: 15px 30px; font-size: 1.5rem; background: #440000; color: #f00; border: 2px solid #f00; cursor: pointer; }
+        .btn-retry:hover { background: #006600; color: #fff; }
+        .btn-giveup:hover { background: #660000; color: #fff; }
+
+        /* 비네트 & 노이즈 */
+        .vignette {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, transparent 40%, black 140%);
+            pointer-events: none;
         }
     </style>
 </head>
 <body>
 
-<div id="game-container">
-    <canvas id="gameCanvas" width="1000" height="650"></canvas>
-    <div class="scanlines"></div>
-
-    <!-- UI -->
     <div id="ui-layer">
-        <div class="status-box">STAGE: <span id="stage-display">1</span> - <span id="stage-name">지하 감옥</span></div>
-        <div class="status-box" id="password-hint-box">획득한 암호 힌트: <span id="hint-text">없음</span></div>
-        <div class="status-box">목숨: <span id="lives-display">❤❤❤❤❤</span></div>
-    </div>
-
-    <!-- Login -->
-    <div id="login-screen">
-        <div id="login-box">
-            <h1 style="color:red; font-family:'Black Han Sans'; margin:0 0 20px 0; font-size: 3rem;">BLOOD CASTLE<br><span style="font-size:1.5rem">Co-op Escape</span></h1>
-            <p style="color:#ccc;">닉네임을 입력하고 입장하세요.</p>
-            <input type="text" id="nickname-input" placeholder="닉네임" maxlength="8">
-            <br>
-            <button class="btn" onclick="joinGame()">입장하기</button>
-            <p style="color:#888; font-size: 0.8rem; margin-top: 10px;">TIP: 플레이어끼리 겹치지 않습니다. 길을 막지 마세요!</p>
+        <div class="vignette"></div>
+        <div id="crosshair"></div>
+        <div id="hud">
+            교실: <span id="room-name">대기실</span><br>
+            힌트: <span id="hint-count">0</span> / 5
         </div>
-    </div>
-    
-    <!-- Game Over Screen -->
-    <div id="gameover-screen">
-        <h1 style="color:red; font-size:4rem; margin-bottom:20px;">GAME OVER</h1>
-        <p style="color:white; font-size:1.2rem; margin-bottom:30px;">당신의 영혼은 이곳에 갇혔습니다...</p>
-        <button class="btn" onclick="retryStage()" style="font-size:1.5rem; padding:15px 30px;">재도전 (Retry)</button>
+        <div id="timer-box">05:00</div>
+        <div id="interact-msg">[클릭] 조사하기</div>
     </div>
 
-    <!-- Quiz Modal -->
-    <div id="quiz-modal" class="modal">
+    <div id="quiz-modal">
         <h2 id="quiz-subject">문제</h2>
-        <div id="quiz-content" class="modal-content"></div>
+        <p id="quiz-text" style="font-size:1.1rem; margin-bottom:20px;"></p>
         <div id="quiz-options"></div>
+        <p style="color:#a1887f; font-size:0.8rem; margin-top:10px;">⚠️ 문제를 푸는 동안에도 '그것'은 다가옵니다...</p>
     </div>
 
-    <!-- Gate Modal (Password) -->
-    <div id="gate-modal" class="modal">
-        <h2>탈출구 봉인</h2>
-        <div class="modal-content">
-            이 문을 열려면 각 방에서 얻은 힌트를 조합하여 비밀번호를 입력해야 합니다.
-            <br><br>
-            <input type="text" id="gate-password" placeholder="비밀번호 입력" style="width:80%;">
+    <div id="start-screen">
+        <h1>SHADOW SCHOOL</h1>
+        <p style="color:#ccc; font-size:1.2rem;">6학년 2학기의 악몽에서 탈출하라</p>
+        <p>나무 바닥이 삐걱거리는 소리가 들립니다...</p>
+        <p style="color:red; font-weight:bold;">검은 형체의 '붉은 가시'를 조심하세요.</p>
+        <button class="btn-start" id="btn-init">입장하기</button>
+    </div>
+
+    <div id="gameover-screen">
+        <div id="gameover-msg">GAME OVER</div>
+        <p id="death-reason" style="font-size:1.5rem;">...</p>
+        <div class="btn-group">
+            <button class="btn-retry" onclick="restartGame(false)">다시 시도</button>
+            <button class="btn-giveup" onclick="restartGame(true)">포기하기 (지옥)</button>
         </div>
-        <button class="btn" onclick="checkGatePassword()">문 열기</button>
-        <button class="btn" onclick="closeGateModal()">닫기</button>
     </div>
 
-    <!-- Message Overlay -->
-    <div id="message-overlay" style="position:absolute; top:40%; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); padding:20px; border:2px solid red; color:white; display:none; z-index:150; font-size:1.5rem; text-align:center;"></div>
-</div>
-
-<!-- Firebase SDKs -->
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, query, orderBy, limit, serverTimestamp, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-    // --- [중요] Firebase 설정 영역 ---
-    let firebaseConfig;
-    let appId;
-
-    // 1. 깃허브(GitHub) 등 외부 호스팅용 설정 (사용자가 제공한 값)
-    const userConfig = {
-        apiKey: "AIzaSyBsPHiR88AhOo-mT3zbZZpGc-tiWcQLXPA",
-        authDomain: "escape-e3f1d.firebaseapp.com",
-        projectId: "escape-e3f1d",
-        storageBucket: "escape-e3f1d.firebasestorage.app",
-        messagingSenderId: "87061489514",
-        appId: "1:87061489514:web:8ad7144834626ac6f5e713",
-        measurementId: "G-0QLEQD1BS2"
-    };
-    const userAppId = "escape-e3f1d";
-
-    // 2. 환경 감지 로직
-    if (typeof __firebase_config !== 'undefined') {
-        // [미리보기 환경] 구글 임시 DB 사용
-        console.log("Canvas Environment Detected");
-        firebaseConfig = JSON.parse(__firebase_config);
-        appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app';
-    } else {
-        // [외부 환경] 사용자 커스텀 DB 사용 (GitHub 등)
-        console.log("External Hosting Detected: Using 'escape-e3f1d'");
-        firebaseConfig = userConfig;
-        appId = userAppId;
-    }
-
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-
-    let currentUser = null;
-    let myPlayerId = null;
-    let nickname = "Player";
-
-    // --- Game Assets (Images) ---
-    function createSafeImage(src) {
-        const img = new Image();
-        img.crossOrigin = "Anonymous"; 
-        img.src = src;
-        return img;
-    }
-
-    const assets = {
-        player: createSafeImage("https://cdn-icons-png.flaticon.com/512/3408/3408545.png"), 
-        monsterFly: createSafeImage("https://cdn-icons-png.flaticon.com/512/3062/3062634.png"),
-        monsterCrawl: createSafeImage("https://cdn-icons-png.flaticon.com/512/2931/2931692.png"),
-        bg1: createSafeImage("https://images.unsplash.com/photo-1599587440406-d7607775531d?q=80&w=1080&auto=format&fit=crop"), // Dungeon
-        bg2: createSafeImage("https://images.unsplash.com/photo-1518640165980-d3e0e2aa6c1e?q=80&w=1080&auto=format&fit=crop"), // Hall
-        bg3: createSafeImage("https://images.unsplash.com/photo-1505506874110-6a7a69069a08?q=80&w=1080&auto=format&fit=crop"), // Spire
-        items: {
-            book: createSafeImage("https://cdn-icons-png.flaticon.com/512/3330/3330314.png"),
-            chest: createSafeImage("https://cdn-icons-png.flaticon.com/512/3014/3014798.png"),
-            potion: createSafeImage("https://cdn-icons-png.flaticon.com/512/867/867927.png")
-        }
-    };
-    
-    // --- Question Bank (6th Grade Curriculum - Expanded) ---
-    const questionBank = [
-        // 수학
-        { q: "[수학] 원의 넓이를 구하는 공식은?", options: ["반지름×반지름×원주율", "지름×원주율", "밑변×높이", "가로×세로"], a: 0 },
-        { q: "[수학] 지름이 10cm인 원의 원주는? (원주율: 3.14)", options: ["15.7cm", "31.4cm", "314cm", "10cm"], a: 1 },
-        { q: "[수학] 비례식 2:3 = 4:□ 에서 □는?", options: ["5", "6", "7", "8"], a: 1 },
-        { q: "[수학] 밑면의 반지름이 5, 높이가 10인 원기둥의 부피는? (원주율: 3)", options: ["250", "750", "150", "500"], a: 1 }, 
-        { q: "[수학] 직육면체의 겉넓이를 구하는 방법은?", options: ["여섯 면의 넓이의 합", "밑넓이 × 높이", "가로 × 세로", "밑변 × 높이 ÷ 2"], a: 0 },
-        { q: "[수학] 3.5 ÷ 0.5 의 값은?", options: ["5", "6", "7", "8"], a: 2 },
-        { q: "[수학] 원기둥의 전개도에서 옆면의 가로 길이는 무엇과 같은가?", options: ["밑면의 지름", "밑면의 원주", "원기둥의 높이", "밑면의 반지름"], a: 1 },
-        { q: "[수학] 비례배분: 사탕 10개를 2:3으로 나누면?", options: ["2개, 8개", "4개, 6개", "5개, 5개", "3개, 7개"], a: 1 },
-        { q: "[수학] 쌓기나무의 개수를 셀 때 보이지 않는 부분도 생각해야 한다. (O/X)", options: ["O", "X"], a: 0 },
-        { q: "[수학] 각기둥의 이름은 무엇에 따라 결정되는가?", options: ["높이", "옆면의 모양", "밑면의 모양", "모서리의 수"], a: 2 },
-        { q: "[수학] 5/6 ÷ 2/3 의 계산 결과는?", options: ["1과 1/4", "1과 1/2", "5/9", "5/4"], a: 0 },
-
-        // 사회
-        { q: "[사회] 우리나라의 입법 기관은?", options: ["국회", "법원", "정부", "경찰청"], a: 0 },
-        { q: "[사회] 세계에서 가장 큰 대륙은?", options: ["아시아", "아프리카", "유럽", "남아메리카"], a: 0 },
-        { q: "[사회] 지구촌 환경 문제를 해결하기 위한 국제 협약이 아닌 것은?", options: ["파리 협정", "도쿄 의정서", "람사르 협약", "강화도 조약"], a: 3 },
-        { q: "[사회] 국민의 권리를 침해받았을 때 구제를 요청하는 곳은?", options: ["헌법재판소", "국세청", "교육부", "우체국"], a: 0 },
-        { q: "[사회] 6.25 전쟁이 일어난 연도는?", options: ["1945년", "1950년", "1953년", "1960년"], a: 1 },
-        { q: "[사회] 민주주의의 기본 원칙이 아닌 것은?", options: ["국민 주권", "권력 분립", "입헌 주의", "독재 정치"], a: 3 },
-        { q: "[사회] 이웃 나라 중국의 수도는?", options: ["베이징", "상하이", "도쿄", "서울"], a: 0 },
-        { q: "[사회] 법을 만들고 고치는 일을 하는 곳은?", options: ["국회", "정부", "법원", "시청"], a: 0 },
-        { q: "[사회] 우리나라 경제 성장의 특징으로 알맞지 않은 것은?", options: ["수출 중심", "첨단 산업 발달", "농업 중심 사회 유지", "국민 소득 증가"], a: 2 },
-        { q: "[사회] 공정한 재판을 위해 법원은 다른 국가 기관의 간섭을 받지 않는다. 이것은?", options: ["사법권의 독립", "삼권 분립", "지방 자치", "국민 투표"], a: 0 },
-        
-        // 과학
-        { q: "[과학] 전기가 잘 통하는 물체를 무엇이라 하는가?", options: ["도체", "부도체", "반도체", "초전도체"], a: 0 },
-        { q: "[과학] 연소의 3요소가 아닌 것은?", options: ["탈 물질", "산소", "발화점 이상의 온도", "이산화탄소"], a: 3 },
-        { q: "[과학] 계절이 변하는 까닭은?", options: ["지구 자전축이 기울어진 채 공전해서", "태양과의 거리가 변해서", "지구가 자전해서", "달의 인력 때문에"], a: 0 },
-        { q: "[과학] 식물이 양분을 만드는 과정은?", options: ["광합성", "호흡", "증산 작용", "소화"], a: 0 },
-        { q: "[과학] 우리 몸에서 혈액을 순환시키는 기관은?", options: ["심장", "위", "폐", "간"], a: 0 },
-        { q: "[과학] 낮과 밤이 생기는 이유는?", options: ["지구의 자전", "지구의 공전", "달의 공전", "태양의 이동"], a: 0 },
-        { q: "[과학] 산소의 성질로 알맞은 것은?", options: ["색깔이 있다", "냄새가 있다", "다른 물질이 타는 것을 돕는다", "불을 끄는 성질이 있다"], a: 2 },
-        { q: "[과학] 북쪽 하늘에서 볼 수 있는 별자리는?", options: ["오리온자리", "전갈자리", "큰곰자리(북두칠성)", "사자자리"], a: 2 },
-        { q: "[과학] 우리 몸의 소화 기관이 아닌 것은?", options: ["위", "소장", "대장", "심장"], a: 3 },
-        { q: "[과학] 렌즈의 종류 중 빛을 모으는 성질이 있는 것은?", options: ["볼록 렌즈", "오목 렌즈", "평면 렌즈", "선글라스"], a: 0 },
-
-        // 영어
-        { q: "[영어] '나는 어제 학교에 갔다'의 올바른 영작은?", options: ["I go to school yesterday.", "I went to school yesterday.", "I will go to school.", "I am going to school."], a: 1 },
-        { q: "[영어] 미래를 나타내는 조동사는?", options: ["did", "will", "do", "can"], a: 1 },
-        { q: "[영어] '환경'을 영어로 하면?", options: ["Environment", "Government", "Apartment", "Department"], a: 0 },
-        { q: "[영어] 빈칸에 알맞은 말: He _____ happy.", options: ["is", "are", "am", "be"], a: 0 },
-        { q: "[영어] 'Museum'의 뜻은?", options: ["박물관", "도서관", "학교", "병원"], a: 0 },
-        { q: "[영어] 'What did you do?' 의 뜻은?", options: ["너는 무엇을 할 거니?", "너는 무엇을 했니?", "너는 무엇을 좋아하니?", "너는 어디에 가니?"], a: 1 },
-        { q: "[영어] 다음 중 과일이 아닌 것은?", options: ["Apple", "Banana", "Carrot", "Grape"], a: 2 },
-        { q: "[영어] 12월을 영어로?", options: ["October", "November", "December", "January"], a: 2 },
-        { q: "[영어] 'Can you help me?'에 대한 대답으로 알맞은 것은?", options: ["Yes, I can.", "No, I don't.", "Yes, I am.", "No, thank you."], a: 0 },
-        { q: "[영어] '치통'을 영어로 하면?", options: ["Headache", "Toothache", "Stomachache", "Cold"], a: 1 },
-
-        // 국어/상식
-        { q: "[국어] 주장을 뒷받침하는 내용을 무엇이라 하는가?", options: ["근거", "서론", "결론", "예시"], a: 0 },
-        { q: "[국어] '발이 넓다'의 관용적 의미는?", options: ["아는 사람이 많다", "발 사이즈가 크다", "잘 걷는다", "신발이 크다"], a: 0 },
-        { q: "[국어] 이야기를 이끌어가는 주체를 무엇이라 하는가?", options: ["서술자", "독자", "작가", "출판사"], a: 0 },
-        { q: "[국어] 훈민정음을 창제한 왕은?", options: ["세종대왕", "이순신", "정조", "영조"], a: 0 },
-        { q: "[상식] 3.1절은 몇 월 며칠인가?", options: ["3월 1일", "3월 3일", "3월 31일", "1월 3일"], a: 0 },
-        { q: "[국어] 광고의 목적은?", options: ["정보 전달 및 설득", "비판", "감동", "기록"], a: 0 },
-        { q: "[국어] '미역국을 먹다'의 관용적 의미는?", options: ["시험에 떨어지다", "생일을 맞다", "배가 고프다", "화를 내다"], a: 0 },
-        { q: "[국어] 글쓴이의 관점을 파악하는 방법으로 알맞지 않은 것은?", options: ["제목을 살펴본다", "표현을 살펴본다", "글쓴이의 나이를 추측한다", "글의 내용을 파악한다"], a: 2 },
-        { q: "[상식] 올림픽 오륜기의 색깔이 아닌 것은?", options: ["파랑", "노랑", "검정", "보라"], a: 3 },
-        { q: "[상식] 대한민국 국보 1호는?", options: ["숭례문(남대문)", "흥인지문", "석굴암", "다보탑"], a: 0 }
-    ];
-
-    // --- Game State ---
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    
-    let gameState = 'LOGIN'; 
-    let stage = 1;
-    let lives = 5;
-    let collectedHints = []; 
-    let currentPassword = ""; 
-    let globalQuestionDeck = []; 
-
-    // Map & Physics
-    const TILE_SIZE = 50;
-    const GRAVITY = 0.6;
-    const JUMP_FORCE = -16; 
-    const SPEED = 5;
-    let map = [];
-    let cameraX = 0;
-
-    // Entities
-    let player = { 
-        x: 50, y: 200, w: 40, h: 40, 
-        vx: 0, vy: 0, 
-        grounded: false, facing: 1,
-        invulnerable: 0 
-    };
-    let otherPlayers = {}; 
-    let monsters = [];
-    let puzzles = [];
-
-    // --- Word Bank ---
-    const wordBank = {
-        1: ["HOPE", "LOVE", "LIFE", "KING", "LUCK", "STAR", "MOON", "LION", "GOLD", "WISH"], 
-        2: ["BRAVE", "DREAM", "WORLD", "PEACE", "EARTH", "HAPPY", "SMILE", "WATER", "MUSIC", "START"], 
-        3: ["TRUTH", "POWER", "LIGHT", "SPACE", "SMART", "HEART", "GLORY", "TRUST", "PRIDE", "FINAL"] 
-    };
-
-    // --- Puzzle Setup Data ---
-    const stageLayouts = {
-        1: {
-            name: "지하 감옥 (Dungeon)",
-            bg: assets.bg1,
-            puzzleSpots: [
-                { type: 'book', x: 200, y: 300 },
-                { type: 'chest', x: 600, y: 150 },
-                { type: 'potion', x: 1000, y: 400 },
-                { type: 'book', x: 1400, y: 250 }
-            ]
-        },
-        2: {
-            name: "유령 연회장 (Grand Hall)",
-            bg: assets.bg2,
-            puzzleSpots: [
-                { type: 'book', x: 300, y: 200 },
-                { type: 'chest', x: 800, y: 100 },
-                { type: 'potion', x: 1200, y: 300 },
-                { type: 'book', x: 1600, y: 150 },
-                { type: 'chest', x: 2000, y: 250 }
-            ]
-        },
-        3: {
-            name: "검은 첨탑 (Dark Spire)",
-            bg: assets.bg3,
-            puzzleSpots: [
-                { type: 'book', x: 400, y: 400 },
-                { type: 'chest', x: 800, y: 200 },
-                { type: 'potion', x: 1200, y: 450 },
-                { type: 'book', x: 1600, y: 150 },
-                { type: 'chest', x: 1900, y: 300 }
-            ]
-        }
-    };
-
-    // --- Helper: Shuffle Array ---
-    function shuffle(array) {
-        for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
-        }
-        return array;
-    }
-
-    // --- Auth & Lobby ---
-    window.joinGame = async () => {
-        const input = document.getElementById('nickname-input');
-        if(!input.value) return alert("닉네임을 입력하세요.");
-        nickname = input.value;
-        
-        globalQuestionDeck = shuffle([...questionBank]);
-
-        try {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-                await signInAnonymously(auth);
+    <!-- Import Maps -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+                "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
             }
-        } catch (e) {
-            console.error(e);
-            alert("접속 오류. Firebase 설정이 필요합니다.");
         }
-    };
+    </script>
 
-    onAuthStateChanged(auth, (user) => {
-        if (user) {
-            currentUser = user;
-            myPlayerId = user.uid;
-            document.getElementById('login-screen').style.display = 'none';
-            setupMultiplayer();
-            loadStage(1);
-            startGameLoop();
-        }
-    });
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+        import * as CANNON from 'cannon-es';
 
-    // --- Multiplayer Logic ---
-    function setupMultiplayer() {
-        const playersRef = collection(db, 'artifacts', appId, 'public', 'data', 'players');
-        const myRef = doc(playersRef, myPlayerId);
-
-        setInterval(async () => {
-            if (gameState !== 'PLAYING') return;
-            try {
-                await setDoc(myRef, {
-                    x: Math.round(player.x),
-                    y: Math.round(player.y),
-                    stage: stage,
-                    nickname: nickname,
-                    facing: player.facing,
-                    lastUpdate: serverTimestamp()
-                });
-            } catch (e) { console.warn("Sync error", e); }
-        }, 100); 
-
-        onSnapshot(playersRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
-                const data = change.doc.data();
-                if (change.doc.id === myPlayerId) return;
-                
-                if (change.type === "added" || change.type === "modified") {
-                    if(data.stage === stage) {
-                        otherPlayers[change.doc.id] = data;
-                    } else {
-                        delete otherPlayers[change.doc.id];
-                    }
+        // --- 텍스처 생성기 (나무, 곰팡이) ---
+        function createWoodTexture(isDark = false) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            
+            // 베이스 색상
+            ctx.fillStyle = isDark ? '#3e2723' : '#5d4037';
+            ctx.fillRect(0, 0, 512, 512);
+            
+            // 나무결 노이즈
+            for (let i = 0; i < 2000; i++) {
+                ctx.fillStyle = isDark ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.05)';
+                ctx.fillRect(Math.random() * 512, 0, Math.random() * 2 + 1, 512); // 세로 줄무늬
+            }
+            // 옹이
+            for (let i = 0; i < 20; i++) {
+                ctx.beginPath();
+                ctx.arc(Math.random() * 512, Math.random() * 512, Math.random() * 10 + 5, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.fill();
+            }
+            if (isDark) { // 곰팡이/거미줄 효과
+                for(let i=0; i<500; i++) {
+                    ctx.fillStyle = 'rgba(20, 20, 20, 0.3)';
+                    const x = Math.random() * 512;
+                    const y = Math.random() * 512;
+                    ctx.beginPath(); ctx.arc(x, y, Math.random() * 5, 0, Math.PI*2); ctx.fill();
                 }
-                if (change.type === "removed") {
-                    delete otherPlayers[change.doc.id];
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
+        const woodTexture = createWoodTexture(false);
+        const ceilingTexture = createWoodTexture(true);
+
+        // --- 게임 데이터 ---
+        const subjects = ["국어", "수학", "사회", "과학", "영어"];
+        let currentSubjectIndex = 0;
+        let roomOrder = [];
+
+        // 문제 데이터 생략 (위와 동일하지만 공간 절약을 위해 포함)
+        const quizData = {
+            "국어": [
+                { q: "글쓴이의 주장을 뒷받침하는 자료는?", o: ["근거", "결론", "예시", "비유"], a: 0 },
+                { q: "'발이 넓다'의 뜻은?", o: ["발이 크다", "아는 사람이 많다", "빨리 걷는다", "신발이 크다"], a: 1 },
+                { q: "사건을 이끌어가는 주체는?", o: ["배경", "인물", "소재", "주제"], a: 1 },
+                { q: "영화 감상 후 쓰는 글은?", o: ["기행문", "설명문", "감상문", "논설문"], a: 2 },
+                { q: "뉴스의 기능이 아닌 것은?", o: ["정보 전달", "여론 형성", "상품 판매", "사회 감시"], a: 2 }
+            ],
+            "수학": [
+                { q: "원주율 기호는?", o: ["π", "θ", "λ", "Σ"], a: 0 },
+                { q: "지름 10cm 원의 원주는? (π=3.14)", o: ["31.4cm", "15.7cm", "314cm", "100cm"], a: 0 },
+                { q: "비례식 2:3 = 4:□. □는?", o: ["5", "6", "7", "8"], a: 1 },
+                { q: "원기둥 부피 식?", o: ["밑넓이×높이", "밑넓이+높이", "한변×한변", "가로×세로"], a: 0 },
+                { q: "쌓기나무 위,앞,옆 보면 개수 안다.", o: ["O", "X"], a: 0 }
+            ],
+            "사회": [
+                { q: "법을 만드는 기관?", o: ["국회", "정부", "법원", "경찰서"], a: 0 },
+                { q: "지구본을 평면에 나타낸 것?", o: ["지구본", "세계 지도", "위성 사진", "내비"], a: 1 },
+                { q: "6.25 전쟁 발발 연도?", o: ["1945", "1950", "1960", "1919"], a: 1 },
+                { q: "우리나라 경제 성장 특징?", o: ["수입 중심", "농업 중심", "수출 중심", "폐쇄 경제"], a: 2 },
+                { q: "권리 보호 최후의 보루?", o: ["법원", "학교", "은행", "마트"], a: 0 }
+            ],
+            "과학": [
+                { q: "전기가 흐르는 물질?", o: ["도체", "부도체", "반도체", "유전체"], a: 0 },
+                { q: "연소의 3요소 아님?", o: ["산소", "탈 물질", "발화점 이상 온도", "이산화탄소"], a: 3 },
+                { q: "계절 변화 이유?", o: ["자전", "공전", "모양", "중력"], a: 1 },
+                { q: "소화 기관?", o: ["심장", "위", "폐", "뇌"], a: 1 },
+                { q: "낮과 밤 이유?", o: ["지구 자전", "지구 공전", "달의 공전", "태양 이동"], a: 0 }
+            ],
+            "영어": [
+                { q: "Museum?", o: ["도서관", "박물관", "학교", "병원"], a: 1 },
+                { q: "미래 조동사?", o: ["Will", "Did", "Do", "Can"], a: 0 },
+                { q: "What did you do?", o: ["내일 뭐해?", "어제 뭐했니?", "지금 뭐해?", "누구니?"], a: 1 },
+                { q: "Toothache?", o: ["두통", "치통", "감기", "열"], a: 1 },
+                { q: "12월?", o: ["December", "November", "October", "January"], a: 0 }
+            ]
+        };
+
+        // --- 오디오 시스템 ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let bgmInterval;
+        
+        function playTone(freq, type, duration, vol = 0.1) {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function playBGM() {
+            if(bgmInterval) clearInterval(bgmInterval);
+            
+            if (isHardMode) {
+                bgmInterval = setInterval(() => {
+                    if(gameState !== 'PLAYING') return;
+                    const notes = [100, 110, 120, 200, 210, 220]; 
+                    playTone(notes[Math.floor(Math.random() * notes.length)], 'sawtooth', 0.5, 0.2);
+                    if(Math.random() < 0.3) playTone(Math.random()*800, 'square', 0.1, 0.05); 
+                }, 300);
+            } else {
+                bgmInterval = setInterval(() => {
+                    if(gameState !== 'PLAYING') return;
+                    const notes = [523, 587, 659, 698, 783, 880, 987];
+                    playTone(notes[Math.floor(Math.random() * notes.length)], 'sine', 1.5, 0.1);
+                    if(Math.random() < 0.1) playTone(notes[0]-100, 'sawtooth', 2.0, 0.05);
+                }, 800);
+            }
+        }
+
+        function playScream() {
+            playTone(800, 'sawtooth', 0.5, 0.5);
+            setTimeout(() => playTone(700, 'sawtooth', 0.5, 0.5), 100);
+            setTimeout(() => playTone(600, 'sawtooth', 1.0, 0.5), 200);
+        }
+
+        function playSpikeSound() {
+            playTone(400, 'square', 0.1, 0.3);
+            playTone(300, 'square', 0.1, 0.3);
+        }
+
+        // --- 전역 변수 ---
+        let scene, camera, renderer, world;
+        let controls;
+        let playerBody, enemyBody;
+        let gameState = 'START';
+        let hintsCollected = 0;
+        let timer = 300; 
+        let quizBoxes = [];
+        let doorMesh = null;
+        let currentRoomQuizDeck = [];
+        let activeQuizBox = null;
+        let isHardMode = false;
+        
+        // 속도 상향
+        let playerSpeed = 25.0; // 기존 10 -> 25
+        let enemySpeed = 12.0;  // 기존 3.5 -> 12 (하드모드 18)
+
+        let enemyMesh;
+        let spikes = []; // 가시 객체 배열
+
+        const raycaster = new THREE.Raycaster();
+        const center = new THREE.Vector2(0, 0);
+
+        // --- 초기화 ---
+        const startBtn = document.getElementById('btn-init');
+        startBtn.addEventListener('click', () => {
+            document.getElementById('start-screen').style.display = 'none';
+            initGame();
+        });
+
+        window.restartGame = (hardMode) => {
+            document.getElementById('gameover-screen').style.display = 'none';
+            isHardMode = hardMode;
+            
+            if(isHardMode) {
+                enemySpeed = 18.0; 
+                timer = 200; 
+            } else {
+                enemySpeed = 12.0;
+                timer = 300;
+            }
+
+            while(scene.children.length > 0){ scene.remove(scene.children[0]); }
+            world.bodies = [];
+            initGame();
+        };
+
+        function shuffle(array) { return array.sort(() => Math.random() - 0.5); }
+
+        function initGame() {
+            roomOrder = shuffle([...subjects]);
+            currentSubjectIndex = 0;
+            hintsCollected = 0;
+            document.getElementById('hint-count').innerText = "0";
+            
+            initThree();
+            initPhysics();
+            loadRoom(roomOrder[currentSubjectIndex]);
+            
+            gameState = 'PLAYING';
+            playBGM();
+            animate();
+            
+            if(window.gameTimer) clearInterval(window.gameTimer);
+            window.gameTimer = setInterval(() => {
+                if(gameState === 'PLAYING') {
+                    timer--;
+                    const m = Math.floor(timer / 60).toString().padStart(2, '0');
+                    const s = (timer % 60).toString().padStart(2, '0');
+                    document.getElementById('timer-box').innerText = `${m}:${s}`;
+                    if(timer <= 0) gameOver("시간이 초과되었습니다...");
+                }
+            }, 1000);
+        }
+
+        function initThree() {
+            scene = new THREE.Scene();
+            
+            if (isHardMode) {
+                scene.background = new THREE.Color(0x000000); 
+                scene.fog = new THREE.FogExp2(0x220000, 0.05); 
+            } else {
+                scene.background = new THREE.Color(0x100505); 
+                scene.fog = new THREE.FogExp2(0x100505, 0.025); 
+            }
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            if (document.querySelector('canvas')) document.body.removeChild(document.querySelector('canvas'));
+            document.body.appendChild(renderer.domElement);
+
+            // 손전등
+            const flashlight = new THREE.SpotLight(0xffffff, isHardMode ? 2.5 : 4); 
+            flashlight.angle = Math.PI / 2.5; 
+            flashlight.penumbra = 0.5;
+            flashlight.decay = 1; 
+            flashlight.distance = isHardMode ? 30 : 80; 
+            flashlight.castShadow = true;
+            camera.add(flashlight);
+            flashlight.target = camera; 
+            scene.add(camera);
+
+            // 전체 조명 (방 밝게)
+            const ambient = new THREE.AmbientLight(0xffaa88, isHardMode ? 0.3 : 0.8);
+            scene.add(ambient);
+        }
+
+        function initPhysics() {
+            world = new CANNON.World();
+            world.gravity.set(0, -30, 0); // 중력 더 강화 (빠른 게임플레이)
+            
+            const defMat = new CANNON.Material();
+            const contact = new CANNON.ContactMaterial(defMat, defMat, { friction: 0.0, restitution: 0.0 });
+            world.addContactMaterial(contact);
+
+            const shape = new CANNON.Sphere(1.5); 
+            playerBody = new CANNON.Body({ mass: 70, shape: shape, material: defMat, fixedRotation: true, linearDamping: 0.9 });
+            playerBody.position.set(0, 5, 0);
+            world.addBody(playerBody);
+
+            playerBody.addEventListener('collide', (e) => {
+                const normal = new CANNON.Vec3();
+                e.contact.ni.negate(normal);
+                if(normal.dot(new CANNON.Vec3(0,1,0)) > 0.5) canJump = true;
+            });
+
+            // 적 (검은 형체)
+            const eShape = new CANNON.Cylinder(1, 1, 3, 8);
+            enemyBody = new CANNON.Body({ mass: 100, shape: eShape, material: defMat, fixedRotation: true, linearDamping: 0.9 });
+            enemyBody.position.set(0, -100, 0); 
+            world.addBody(enemyBody);
+
+            // 적 그래픽
+            const eGeo = new THREE.CapsuleGeometry(1, 3, 4, 8);
+            const eMat = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.1 }); // 더 검고 매끄럽게
+            enemyMesh = new THREE.Mesh(eGeo, eMat);
+            
+            const eyeGeo = new THREE.SphereGeometry(0.3);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const eye1 = new THREE.Mesh(eyeGeo, eyeMat);
+            eye1.position.set(-0.4, 1, 0.8);
+            const eye2 = new THREE.Mesh(eyeGeo, eyeMat);
+            eye2.position.set(0.4, 1, 0.8);
+            enemyMesh.add(eye1);
+            enemyMesh.add(eye2);
+            
+            scene.add(enemyMesh);
+
+            controls = new PointerLockControls(camera, document.body);
+            
+            document.body.addEventListener('click', () => {
+                const modal = document.getElementById('quiz-modal');
+                const goScreen = document.getElementById('gameover-screen');
+                const startScreen = document.getElementById('start-screen');
+                
+                if(gameState === 'PLAYING' && modal.style.display !== 'block' && goScreen.style.display !== 'flex' && startScreen.style.display !== 'flex') {
+                    controls.lock();
+                    checkInteraction(true);
                 }
             });
-        });
-    }
+        }
 
-    // --- Game Logic ---
-    function loadStage(lvl) {
-        stage = lvl;
-        gameState = 'PLAYING';
-        collectedHints = [];
-        player.x = 100; player.y = 200;
-        player.vx = 0; player.vy = 0;
-        player.invulnerable = 120; 
-        
-        const currentLayout = stageLayouts[stage];
-        document.getElementById('stage-display').innerText = stage;
-        document.getElementById('stage-name').innerText = currentLayout.name;
-        document.getElementById('gameover-screen').style.display = 'none';
-        updateHintUI();
-        updateLives();
-
-        generateMap(lvl);
-
-        const words = wordBank[lvl];
-        currentPassword = words[Math.floor(Math.random() * words.length)];
-
-        const spots = currentLayout.puzzleSpots;
-        
-        let startIndex = 0;
-        if (lvl === 2) startIndex = 4;
-        if (lvl === 3) startIndex = 9;
-
-        puzzles = spots.map((spot, index) => {
-            const deckIndex = (startIndex + index) % globalQuestionDeck.length;
-            const qData = globalQuestionDeck[deckIndex];
+        function loadRoom(subjectName) {
+            document.getElementById('room-name').innerText = subjectName + (isHardMode ? " (지옥)" : "");
+            document.getElementById('hint-count').innerText = "0";
+            hintsCollected = 0;
             
-            return {
-                ...spot,
-                q: qData.q,
-                options: qData.options,
-                a: qData.a,
-                hint: currentPassword[index] || "?", 
-                solved: false
-            };
-        });
-        
-        // --- Enhanced Monster Generation ---
-        monsters = [];
-        const monsterCount = 5 + lvl * 2;
-        const width = map[0].length * TILE_SIZE;
+            currentRoomQuizDeck = shuffle([...quizData[subjectName]]);
+            quizBoxes = [];
+            spikes = []; // 가시 초기화
 
-        for(let i=0; i<monsterCount; i++) {
-            const type = Math.random() > 0.5 ? 'fly' : 'crawl';
-            const m = {
-                x: 400 + Math.random() * (width - 600),
-                y: type === 'fly' ? 100 + Math.random() * 200 : 0, 
-                w: 40, h: 40,
-                vx: 2, vy: 0,
-                type: type,
-                attackTimer: 100 + Math.random() * 300, 
-                isAttacking: false,
-                attackDuration: 0,
-                patrolStart: 0, patrolEnd: width
-            };
-            monsters.push(m);
-        }
-
-        showMessage(`STAGE ${lvl} 시작!\n힌트를 모아 암호를 해독하세요.`);
-    }
-    
-    window.retryStage = () => {
-        lives = 5;
-        loadStage(stage);
-    }
-
-    // --- Dynamic Map Generation per Stage ---
-    function generateMap(lvl) {
-        map = [];
-        const width = 60; 
-        const height = 13;
-        
-        for(let y=0; y<height; y++) {
-            let row = [];
-            for(let x=0; x<width; x++) {
-                if(y === height-1) row.push(1); 
-                else if(x===0 || x===width-1) row.push(1); 
-                else row.push(0);
-            }
-            map.push(row);
-        }
-
-        if (lvl === 1) {
-            addPlatform(5, 9, 4);
-            addPlatform(12, 7, 5);
-            addPlatform(20, 10, 3);
-            addPlatform(25, 6, 6);
-            addPlatform(35, 8, 5);
-            addPlatform(42, 5, 4);
-            addPlatform(50, 9, 3);
-        } 
-        else if (lvl === 2) {
-            for(let x=15; x<20; x++) map[height-1][x] = 0; // Pit
-            for(let x=35; x<40; x++) map[height-1][x] = 0; // Pit
-            addPlatform(8, 8, 3);
-            addPlatform(15, 6, 3);
-            addPlatform(22, 9, 4);
-            addPlatform(28, 5, 4);
-            addPlatform(36, 6, 3);
-            addPlatform(45, 8, 5);
-            addPlatform(52, 5, 3);
-        } 
-        else if (lvl === 3) {
-            for(let x=10; x<50; x++) if(x%5 !== 0) map[height-1][x] = 0; 
-            addPlatform(5, 10, 2);
-            addPlatform(10, 8, 2);
-            addPlatform(15, 6, 2);
-            addPlatform(20, 4, 2);
-            addPlatform(25, 7, 2);
-            addPlatform(30, 10, 2);
-            addPlatform(35, 5, 2);
-            addPlatform(40, 8, 2);
-            addPlatform(45, 4, 2);
-            addPlatform(50, 7, 2);
-        }
-
-        map[height-2][width-3] = 9;
-        map[height-3][width-3] = 9;
-
-        function addPlatform(x, y, w) {
-            for(let i=0; i<w; i++) if(x+i < width-1) map[y][x+i] = 1;
-        }
-    }
-
-    function startGameLoop() {
-        requestAnimationFrame(gameLoop);
-    }
-
-    function gameLoop() {
-        update();
-        draw();
-        requestAnimationFrame(gameLoop);
-    }
-
-    function update() {
-        if(gameState !== 'PLAYING') return;
-
-        const keys = window.keys || {};
-        if (keys['ArrowLeft']) { player.vx = -SPEED; player.facing = -1; }
-        else if (keys['ArrowRight']) { player.vx = SPEED; player.facing = 1; }
-        else { player.vx = 0; }
-
-        if (keys['ArrowUp'] && player.grounded) {
-            player.vy = JUMP_FORCE;
-            player.grounded = false;
-        }
-
-        if (keys['Space']) checkInteraction();
-
-        player.vy += GRAVITY;
-
-        // ★ [수정] X축 이동 및 플레이어끼리 충돌 처리
-        player.x += player.vx;
-        checkCollision(player, 'x');
-        checkPlayerCollision('x');
-
-        // ★ [수정] Y축 이동 및 플레이어끼리 충돌 처리
-        player.y += player.vy;
-        player.grounded = false;
-        checkCollision(player, 'y');
-        checkPlayerCollision('y');
-        
-        if (player.invulnerable > 0) player.invulnerable--;
-
-        if(player.y > 800) { 
-            takeDamage("추락했습니다!");
-            player.x = 100; player.y = 200; player.vy = 0;
-        }
-
-        monsters.forEach(m => {
-            m.x += m.vx;
-            if(Math.random() < 0.01) m.vx *= -1;
+            playerBody.position.set(0, 5, 0);
+            playerBody.velocity.set(0,0,0);
             
-            if (m.type === 'crawl') {
-                m.vy += GRAVITY;
-                m.y += m.vy;
-                const left = Math.floor(m.x / TILE_SIZE);
-                const right = Math.floor((m.x + m.w) / TILE_SIZE);
-                const bottom = Math.floor((m.y + m.h) / TILE_SIZE);
-                const top = Math.floor(m.y / TILE_SIZE);
-                if (m.vy > 0 && (isSolid(left, bottom) || isSolid(right, bottom))) {
-                    m.y = bottom * TILE_SIZE - m.h;
-                    m.vy = 0;
-                }
-                const wallSide = m.vx > 0 ? right : left;
-                if (isSolid(wallSide, Math.floor((m.y + m.h/2)/TILE_SIZE))) {
-                    m.vx *= -1;
-                }
-            } else {
-                if (m.x < 0 || m.x > map[0].length * TILE_SIZE) m.vx *= -1;
-            }
+            enemyBody.position.set(40, 5, 40);
+            enemyBody.velocity.set(0,0,0);
 
-            if (m.isAttacking) {
-                m.attackDuration--;
-                if (m.attackDuration <= 0) {
-                    m.isAttacking = false;
-                    m.attackTimer = 200 + Math.random() * 300; 
-                }
-                
-                const dist = Math.hypot((player.x + 20) - (m.x + 20), (player.y + 20) - (m.y + 20));
-                if (dist < 100) { 
-                    takeDamage("가시에 찔렸습니다!");
-                    player.vx = (player.x < m.x) ? -15 : 15;
-                    player.vy = -10;
-                }
-            } else {
-                m.attackTimer--;
-                if (m.attackTimer <= 0) {
-                    m.isAttacking = true;
-                    m.attackDuration = 30; 
-                    if (Math.hypot(player.x - m.x, player.y - m.y) < 400) {
-                        cameraX += (Math.random() - 0.5) * 10; 
-                    }
-                }
-
-                if(Math.abs(player.x - m.x) < 30 && Math.abs(player.y - m.y) < 30) {
-                    takeDamage("괴물에게 닿았습니다!");
-                    player.vy = -10;
-                    player.vx = (player.x < m.x) ? -10 : 10;
-                }
-            }
-        });
-
-        cameraX += (player.x - canvas.width/2 - cameraX) * 0.1;
-        const maxCam = map[0].length * TILE_SIZE - canvas.width;
-        cameraX = Math.max(0, Math.min(cameraX, maxCam));
-    }
-
-    function takeDamage(msg) {
-        if (player.invulnerable > 0) return; 
-
-        lives--;
-        updateLives();
-        player.invulnerable = 120; 
-        showMessage(msg);
-        
-        if(lives <= 0) {
-            gameState = 'GAMEOVER';
-            document.getElementById('gameover-screen').style.display = 'flex';
+            createEnvironment();
         }
-    }
 
-    function checkCollision(ent, axis) {
-        const left = Math.floor(ent.x / TILE_SIZE);
-        const right = Math.floor((ent.x + ent.w - 1) / TILE_SIZE);
-        const top = Math.floor(ent.y / TILE_SIZE);
-        const bottom = Math.floor((ent.y + ent.h - 1) / TILE_SIZE);
+        function createEnvironment() {
+            // 바닥 (목재 텍스처 적용)
+            woodTexture.repeat.set(20, 20);
+            const floorGeo = new THREE.PlaneGeometry(100, 100);
+            const floorMat = new THREE.MeshStandardMaterial({ map: woodTexture });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            scene.add(floor);
+            
+            // 천장 (곰팡이 핀 목재)
+            ceilingTexture.repeat.set(10, 10);
+            const ceilGeo = new THREE.PlaneGeometry(100, 100);
+            const ceilMat = new THREE.MeshStandardMaterial({ map: ceilingTexture, color: 0x888888 });
+            const ceil = new THREE.Mesh(ceilGeo, ceilMat);
+            ceil.rotation.x = Math.PI / 2;
+            ceil.position.y = 15; // 높이
+            scene.add(ceil);
 
-        if (axis === 'x') {
-            if (isSolid(left, top) || isSolid(right, top) || 
-                isSolid(left, bottom) || isSolid(right, bottom)) {
-                ent.x -= ent.vx;
+            const floorBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
+            floorBody.quaternion.setFromEuler(-Math.PI/2, 0, 0);
+            world.addBody(floorBody);
+
+            // 벽 (목재)
+            for(let i=0; i<40; i++) { // 벽 개수 증가
+                const x = (Math.random()-0.5) * 80;
+                const z = (Math.random()-0.5) * 80;
+                if(Math.abs(x) < 5 && Math.abs(z) < 5) continue;
+                createBox(x, 7.5, z, 3, 15, 3, 0x5d4037, true, true); // 텍스처 적용
             }
-        } else {
-            if (ent.vy > 0 && (isSolid(left, bottom) || isSolid(right, bottom))) {
-                ent.y = bottom * TILE_SIZE - ent.h;
-                ent.vy = 0;
-                ent.grounded = true;
-            } else if (ent.vy < 0 && (isSolid(left, top) || isSolid(right, top))) {
-                ent.y = (top + 1) * TILE_SIZE;
-                ent.vy = 0;
-            }
-        }
-    }
 
-    // ★ [핵심] 플레이어 간 충돌 처리 로직 (가로막기, 밟기)
-    function checkPlayerCollision(axis) {
-        for (const pid in otherPlayers) {
-            const other = otherPlayers[pid];
-            // 다른 플레이어도 40x40 크기로 가정
-            const otherW = 40;
-            const otherH = 40;
-
-            // AABB(사각형) 충돌 검사
-            if (player.x < other.x + otherW && player.x + player.w > other.x &&
-                player.y < other.y + otherH && player.y + player.h > other.y) {
+            // 퀴즈 박스
+            for(let i=0; i<8; i++) {
+                const x = (Math.random()-0.5) * 60;
+                const z = (Math.random()-0.5) * 60;
+                if(Math.abs(x) < 10 && Math.abs(z) < 10) continue;
                 
-                if (axis === 'x') {
-                    // X축 충돌: 옆으로 밀어내기 (가로막기)
-                    if (player.vx > 0) { 
-                        // 오른쪽으로 가다가 왼쪽 면에 부딪힘
-                        player.x = other.x - player.w;
-                    } else if (player.vx < 0) {
-                        // 왼쪽으로 가다가 오른쪽 면에 부딪힘
-                        player.x = other.x + otherW;
+                const mesh = createBox(x, 2, z, 1.5, 1.5, 1.5, 0xffd700, false, false);
+                mesh.material.emissive = new THREE.Color(0x333300);
+                mesh.userData = { type: 'quiz', id: i };
+                quizBoxes.push(mesh);
+            }
+
+            // 문
+            const doorGeo = new THREE.BoxGeometry(8, 10, 1);
+            const doorMat = new THREE.MeshStandardMaterial({ color: 0x3e2723 });
+            doorMesh = new THREE.Mesh(doorGeo, doorMat);
+            doorMesh.position.set(0, 5, -45);
+            doorMesh.userData = { type: 'door' };
+            scene.add(doorMesh);
+            
+            const doorBody = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(4, 5, 0.5)) });
+            doorBody.position.set(0, 5, -45);
+            world.addBody(doorBody);
+        }
+
+        function createBox(x, y, z, w, h, d, color, isStatic, useTexture) {
+            const geo = new THREE.BoxGeometry(w, h, d);
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: color, 
+                map: useTexture ? woodTexture : null 
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, y, z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+
+            const body = new CANNON.Body({
+                mass: isStatic ? 0 : 1,
+                shape: new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)),
+                position: new CANNON.Vec3(x, y, z)
+            });
+            world.addBody(body);
+            return mesh;
+        }
+
+        const keyState = {};
+        let canJump = false;
+        document.addEventListener('keydown', (e) => keyState[e.code] = true);
+        document.addEventListener('keyup', (e) => keyState[e.code] = false);
+
+        function checkInteraction(isClick) {
+            if (!camera) return;
+            raycaster.setFromCamera(center, camera);
+            const intersects = raycaster.intersectObjects(scene.children);
+            
+            const msg = document.getElementById('interact-msg');
+            let found = false;
+
+            for(let hit of intersects) {
+                if(hit.distance > 8) continue; 
+
+                if(hit.object.userData.type === 'quiz') {
+                    found = true;
+                    msg.innerText = "[클릭] 힌트 얻기";
+                    msg.style.display = 'block';
+                    if(isClick) openQuiz(hit.object);
+                    break;
+                } else if (hit.object.userData.type === 'door') {
+                    found = true;
+                    if(hintsCollected >= 5) {
+                        msg.innerText = "[클릭] 다음 방으로 탈출";
+                        msg.style.color = "#00ff00";
                     } else {
-                        // 멈춰있는데 다른 플레이어가 겹친 경우 (밀리기 효과)
-                        const distLeft = (player.x + player.w) - other.x;
-                        const distRight = (other.x + otherW) - player.x;
-                        if (distLeft < distRight) player.x = other.x - player.w;
-                        else player.x = other.x + otherW;
+                        msg.innerText = `잠겨있음 (${hintsCollected}/5)`;
+                        msg.style.color = "#ff0000";
                     }
-                    player.vx = 0; // 가로막혔으므로 속도 0
-                } 
-                else if (axis === 'y') {
-                    // Y축 충돌: 밟거나 머리 부딪히기
-                    if (player.vy > 0) { 
-                        // 아래로 떨어지다가 윗면에 닿음 (밟기)
-                        player.y = other.y - player.h;
-                        player.vy = 0;
-                        player.grounded = true;
-                    } else if (player.vy < 0) {
-                        // 점프하다가 아랫면에 닿음 (머리 쿵)
-                        player.y = other.y + otherH;
-                        player.vy = 0;
-                    }
+                    msg.style.display = 'block';
+                    if(isClick && hintsCollected >= 5) nextLevel();
+                    break;
                 }
             }
-        }
-    }
-
-    function isSolid(x, y) {
-        if(y < 0 || y >= map.length || x < 0 || x >= map[0].length) return false;
-        return map[y][x] === 1;
-    }
-
-    function checkInteraction() {
-        const gateX = (map[0].length - 3) * TILE_SIZE;
-        if (Math.abs(player.x - gateX) < 100) {
-            document.getElementById('gate-modal').style.display = 'block';
-            gameState = 'MODAL';
-            return;
+            if(!found) msg.style.display = 'none';
         }
 
-        let target = null;
-        for(let p of puzzles) {
-            if(p.solved) continue;
-            if(Math.abs(player.x - p.x) < 60 && Math.abs(player.y - p.y) < 60) {
-                target = p;
-                break;
-            }
-        }
-        if(target) openQuiz(target);
-    }
+        function openQuiz(boxMesh) {
+            activeQuizBox = boxMesh;
+            const q = currentRoomQuizDeck.pop(); 
+            if(!q) return; 
 
-    window.openQuiz = (q) => {
-        gameState = 'QUIZ';
-        document.getElementById('quiz-modal').style.display = 'block';
-        document.getElementById('quiz-content').innerText = q.q;
-        const opts = document.getElementById('quiz-options');
-        opts.innerHTML = '';
-        q.options.forEach((o, i) => {
-            const btn = document.createElement('button');
-            btn.className = 'option-btn';
-            btn.innerText = `${i+1}. ${o}`;
-            btn.onclick = () => answerQuiz(q, i);
-            opts.appendChild(btn);
-        });
-    };
+            document.getElementById('quiz-subject').innerText = `[${subjects[currentSubjectIndex]}] 문제`;
+            document.getElementById('quiz-text').innerText = q.q;
+            
+            const optsDiv = document.getElementById('quiz-options');
+            optsDiv.innerHTML = '';
+            q.o.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'quiz-btn';
+                btn.innerText = `${idx+1}. ${opt}`;
+                btn.onclick = () => solveQuiz(idx === q.a);
+                optsDiv.appendChild(btn);
+            });
 
-    window.answerQuiz = (q, idx) => {
-        document.getElementById('quiz-modal').style.display = 'none';
-        if(idx === q.a) {
-            q.solved = true;
-            collectedHints.push(q.hint);
-            updateHintUI();
-            showMessage(`정답! 힌트 '${q.hint}' 획득!`);
-        } else {
-            takeDamage("오답입니다! 생명이 줄어듭니다.");
-        }
-        gameState = 'PLAYING';
-    };
-
-    window.checkGatePassword = () => {
-        const input = document.getElementById('gate-password').value.toUpperCase().trim();
-        const correct = currentPassword;
-        
-        if(input === correct) {
-            document.getElementById('gate-modal').style.display = 'none';
-            if(stage === 3) {
-                alert("축하합니다! 성을 완전히 탈출했습니다!");
-                location.reload();
-            } else {
-                showMessage("문이 열렸습니다! 다음 층으로 이동합니다.");
-                setTimeout(() => loadStage(stage + 1), 2000);
-            }
-        } else {
-            alert("비밀번호가 틀렸습니다.");
-            takeDamage("잘못된 암호입니다!");
-            document.getElementById('gate-modal').style.display = 'none';
-            gameState = 'PLAYING';
-        }
-    };
-
-    window.closeGateModal = () => {
-        document.getElementById('gate-modal').style.display = 'none';
-        gameState = 'PLAYING';
-    };
-
-    function updateHintUI() {
-        document.getElementById('hint-text').innerText = collectedHints.join(" - ") || "없음";
-    }
-
-    function updateLives() {
-        let h = "";
-        for(let i=0; i<lives; i++) h += "❤";
-        for(let i=lives; i<5; i++) h += "🖤";
-        document.getElementById('lives-display').innerText = h;
-    }
-
-    function showMessage(txt) {
-        const el = document.getElementById('message-overlay');
-        el.innerText = txt;
-        el.style.display = 'block';
-        setTimeout(() => el.style.display = 'none', 2000);
-    }
-
-    function safeDrawImage(ctx, img, x, y, w, h, fallbackColor = '#555') {
-        if (img && img.complete && img.naturalWidth !== 0) {
-            try {
-                ctx.drawImage(img, x, y, w, h);
-            } catch (e) {
-                drawFallback(ctx, x, y, w, h, fallbackColor);
-            }
-        } else {
-            drawFallback(ctx, x, y, w, h, fallbackColor);
-        }
-    }
-
-    function drawFallback(ctx, x, y, w, h, color) {
-        ctx.fillStyle = color;
-        ctx.fillRect(x, y, w, h);
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x, y, w, h);
-    }
-
-    function draw() {
-        const currentLayout = stageLayouts[stage];
-        const bg = currentLayout ? currentLayout.bg : null;
-
-        if (bg && bg.complete && bg.naturalWidth !== 0) {
-            ctx.drawImage(bg, 0, 0, canvas.width, canvas.height);
-        } else {
-            ctx.fillStyle = '#110505';
-            ctx.fillRect(0,0,canvas.width, canvas.height);
-        }
-        
-        ctx.fillStyle = 'rgba(20, 0, 0, 0.5)';
-        ctx.fillRect(0,0,canvas.width, canvas.height);
-
-        ctx.save();
-        ctx.translate(-Math.floor(cameraX), 0);
-
-        const width = map[0].length;
-        const height = map.length;
-        const startX = Math.floor(cameraX / TILE_SIZE);
-        const endX = startX + (canvas.width / TILE_SIZE) + 2;
-
-        for(let y=0; y<height; y++) {
-            for(let x=startX; x<=endX; x++) {
-                if(x < 0 || x >= width) continue;
-                const tile = map[y][x];
-                if(tile === 1) {
-                    ctx.fillStyle = '#2b0a0a';
-                    ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                    ctx.strokeStyle = '#551111';
-                    ctx.strokeRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                } else if (tile === 9) {
-                    ctx.fillStyle = 'black';
-                    ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE*2);
-                    ctx.font = '30px Arial';
-                    ctx.fillStyle = 'red';
-                    ctx.fillText('🔒', x*TILE_SIZE+10, y*TILE_SIZE+40);
-                }
-            }
+            controls.unlock();
+            document.getElementById('quiz-modal').style.display = 'block';
         }
 
-        puzzles.forEach(p => {
-            if(p.solved) return;
-            const img = assets.items[p.type] || assets.items.book;
-            const bounce = Math.sin(Date.now() / 300) * 5;
-            safeDrawImage(ctx, img, p.x, p.y + bounce, 40, 40, 'gold');
+        function solveQuiz(isCorrect) {
+            document.getElementById('quiz-modal').style.display = 'none';
+            controls.lock(); 
 
-            if(Math.abs(player.x - p.x) < 60 && Math.abs(player.y - p.y) < 60) {
-                ctx.fillStyle = 'white';
-                ctx.font = '14px sans-serif';
-                ctx.fillText("SPACE", p.x, p.y - 10);
-            }
-        });
-
-        monsters.forEach(m => {
-            ctx.save();
-            let filterColor = null;
-            if (m.isAttacking) {
-                ctx.beginPath();
-                ctx.arc(m.x + m.w/2, m.y + m.h/2, 100, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(255, 0, 0, 0.4)'; 
-                ctx.fill();
+            if(isCorrect) {
+                hintsCollected++;
+                document.getElementById('hint-count').innerText = hintsCollected;
+                playTone(600, 'sine', 0.2); 
                 
-                ctx.strokeStyle = 'red';
-                ctx.lineWidth = 4;
-                for(let i=0; i<8; i++) {
-                    const angle = (Date.now() / 100) + (i * Math.PI / 4);
-                    const cx = m.x + m.w/2;
-                    const cy = m.y + m.h/2;
-                    ctx.beginPath();
-                    ctx.moveTo(cx, cy);
-                    ctx.lineTo(cx + Math.cos(angle) * 100, cy + Math.sin(angle) * 100);
-                    ctx.stroke();
-                }
-                filterColor = 'red';
-            } else if (m.attackTimer < 60) {
-                const shake = (Math.random() - 0.5) * 5;
-                ctx.translate(shake, shake);
-                filterColor = 'orange';
+                scene.remove(activeQuizBox);
+                activeQuizBox.visible = false; 
+                activeQuizBox.userData.type = 'solved';
                 
-                ctx.fillStyle = 'red';
-                ctx.font = '20px sans-serif';
-                ctx.fillText("!!!", m.x+m.w/2, m.y - 10);
-            }
-
-            const mImg = m.type === 'fly' ? assets.monsterFly : assets.monsterCrawl;
-
-            if(m.vx > 0) {
-                 ctx.translate(m.x + m.w, m.y);
-                 ctx.scale(-1, 1);
-                 safeDrawImage(ctx, mImg, 0, 0, m.w, m.h, filterColor || 'green');
+                if(hintsCollected >= 5) {
+                    doorMesh.material.color.set(0x00ff00);
+                    playTone(800, 'sine', 0.5); 
+                }
             } else {
-                 safeDrawImage(ctx, mImg, m.x, m.y, m.w, m.h, filterColor || 'green');
+                playTone(100, 'sawtooth', 0.5); 
+                currentRoomQuizDeck.push(quizData[subjects[currentSubjectIndex]][Math.floor(Math.random()*5)]); 
             }
-            ctx.restore();
-        });
-
-        Object.values(otherPlayers).forEach(p => {
-            ctx.globalAlpha = 0.8;
-            drawAvatar(p.x, p.y, p.facing, assets.player, p.nickname, false);
-            ctx.globalAlpha = 1.0;
-        });
-
-        if (player.invulnerable <= 0 || Math.floor(Date.now() / 100) % 2 === 0) {
-            drawAvatar(player.x, player.y, player.facing, assets.player, nickname, true);
         }
 
-        ctx.restore();
-    }
-
-    function drawAvatar(x, y, facing, imgObj, name, isMe) {
-        ctx.save();
-        ctx.font = 'bold 12px "Nanum Gothic"';
-        ctx.fillStyle = isMe ? '#ffff00' : 'white';
-        ctx.textAlign = 'center';
-        ctx.fillText(name, x + 20, y - 10);
-
-        if(facing === -1) {
-            ctx.translate(x + 40, y);
-            ctx.scale(-1, 1);
-            safeDrawImage(ctx, imgObj, 0, 0, 40, 40, 'blue');
-        } else {
-            safeDrawImage(ctx, imgObj, x, y, 40, 40, 'blue');
+        function nextLevel() {
+            currentSubjectIndex++;
+            if(currentSubjectIndex >= subjects.length) {
+                gameOver("축하합니다! 모든 악몽에서 탈출했습니다!", true);
+            } else {
+                while(scene.children.length > 0){ scene.remove(scene.children[0]); }
+                initThree(); 
+                loadRoom(roomOrder[currentSubjectIndex]);
+                world.bodies = []; 
+                initPhysics(); 
+                loadRoom(roomOrder[currentSubjectIndex]); 
+                timer += 120;
+            }
         }
-        ctx.restore();
-    }
 
-    window.keys = {};
-    window.addEventListener('keydown', e => window.keys[e.code] = true);
-    window.addEventListener('keyup', e => window.keys[e.code] = false);
+        const clock = new THREE.Clock();
 
-</script>
+        function animate() {
+            if(gameState !== 'PLAYING') return;
+            requestAnimationFrame(animate);
+
+            const dt = clock.getDelta();
+            
+            if (world) world.step(1/60, dt, 3);
+
+            if(controls.isLocked) {
+                const direction = new THREE.Vector3();
+                camera.getWorldDirection(direction);
+                direction.y = 0; 
+                direction.normalize();
+
+                const side = new THREE.Vector3();
+                side.crossVectors(camera.up, direction).normalize(); 
+
+                const inputVelocity = new THREE.Vector3();
+
+                if(keyState['KeyW']) inputVelocity.add(direction); 
+                if(keyState['KeyS']) inputVelocity.sub(direction); 
+                if(keyState['KeyA']) inputVelocity.add(side);      
+                if(keyState['KeyD']) inputVelocity.sub(side);      
+
+                if (inputVelocity.length() > 0) inputVelocity.normalize();
+
+                playerBody.velocity.x = inputVelocity.x * playerSpeed;
+                playerBody.velocity.z = inputVelocity.z * playerSpeed;
+
+                if(keyState['Space'] && canJump) {
+                    playerBody.velocity.y = 15; 
+                    canJump = false;
+                }
+                
+                checkInteraction(false);
+            } else {
+                playerBody.velocity.x = 0;
+                playerBody.velocity.z = 0;
+            }
+
+            if(camera) {
+                camera.position.copy(playerBody.position);
+                camera.position.y += 0.5;
+            }
+
+            updateEnemy(dt);
+            updateSpikes(dt); // 가시 업데이트
+
+            if(enemyMesh && enemyBody) {
+                enemyMesh.position.copy(enemyBody.position);
+                enemyMesh.lookAt(playerBody.position.x, playerBody.position.y, playerBody.position.z);
+            }
+
+            if(renderer && scene && camera) renderer.render(scene, camera);
+        }
+
+        // --- 가시 공격 시스템 ---
+        let attackCooldown = 0;
+
+        function updateEnemy(dt) {
+            const dir = new THREE.Vector3().subVectors(playerBody.position, enemyBody.position);
+            const dist = dir.length();
+            
+            // 접촉 판정 (거리 4 이내면 사망 - 가시 사거리 내 혹은 몸체 접촉)
+            if(dist < 4.0) {
+                gameOver("검은 형체에게 잡혔습니다...");
+                return;
+            }
+
+            // 가시 공격 (거리 15 이내면 발사)
+            if (dist < 15.0 && attackCooldown <= 0) {
+                shootSpikes();
+                attackCooldown = 3.0; // 3초 쿨타임
+            }
+            if (attackCooldown > 0) attackCooldown -= dt;
+
+            dir.normalize();
+            
+            enemyBody.velocity.x = dir.x * enemySpeed;
+            enemyBody.velocity.z = dir.z * enemySpeed;
+
+            // 점프 AI
+            if(playerBody.position.y > enemyBody.position.y + 2 || Math.random() < 0.01) {
+                if(Math.abs(enemyBody.velocity.y) < 0.1) {
+                    enemyBody.velocity.y = 10;
+                }
+            }
+        }
+
+        function shootSpikes() {
+            playSpikeSound();
+            const spikeCount = 12;
+            for(let i=0; i<spikeCount; i++) {
+                const angle = (i / spikeCount) * Math.PI * 2;
+                const dx = Math.cos(angle);
+                const dz = Math.sin(angle);
+                
+                // 가시 메쉬 생성 (긴 원뿔)
+                const geo = new THREE.ConeGeometry(0.2, 2, 8);
+                geo.rotateX(Math.PI / 2); // 눕힘
+                const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                const mesh = new THREE.Mesh(geo, mat);
+                
+                mesh.position.copy(enemyBody.position);
+                mesh.position.y += 1; // 몸통 높이에서 발사
+                mesh.lookAt(mesh.position.x + dx, mesh.position.y, mesh.position.z + dz);
+                
+                scene.add(mesh);
+                spikes.push({ mesh: mesh, dir: new THREE.Vector3(dx, 0, dz), life: 30.0, speed: 20.0 }); // life는 거리제한용
+            }
+        }
+
+        function updateSpikes(dt) {
+            for (let i = spikes.length - 1; i >= 0; i--) {
+                const s = spikes[i];
+                // 이동
+                const moveDist = s.speed * dt;
+                s.mesh.position.x += s.dir.x * moveDist;
+                s.mesh.position.z += s.dir.z * moveDist;
+                s.life -= moveDist; // 이동 거리만큼 수명 감소
+
+                // 플레이어 충돌 체크 (간단한 거리 체크)
+                const pDist = s.mesh.position.distanceTo(playerBody.position);
+                if (pDist < 1.5) { // 플레이어 반지름 고려
+                    gameOver("붉은 가시에 찔렸습니다...");
+                    return;
+                }
+
+                // 수명(거리) 다하면 삭제 (약 30단위 이동 후)
+                if (s.life <= 0) {
+                    scene.remove(s.mesh);
+                    spikes.splice(i, 1);
+                }
+            }
+        }
+
+        function gameOver(msg, isClear = false) {
+            gameState = isClear ? 'CLEAR' : 'GAMEOVER';
+            document.getElementById('gameover-screen').style.display = 'flex';
+            document.getElementById('gameover-msg').innerText = isClear ? "ESCAPE!" : "GAME OVER";
+            document.getElementById('gameover-msg').style.color = isClear ? "#00ff00" : "red";
+            document.getElementById('death-reason').innerText = msg;
+            
+            const btnGroup = document.querySelector('.btn-group');
+            if (isClear) btnGroup.style.display = 'none'; 
+            else btnGroup.style.display = 'flex';
+
+            if(!isClear) playScream();
+            
+            controls.unlock();
+        }
+
+        window.addEventListener('resize', () => {
+            if (!camera || !renderer) return; 
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
 </body>
 </html>
