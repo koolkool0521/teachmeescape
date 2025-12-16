@@ -96,6 +96,9 @@
             background: radial-gradient(circle, transparent 40%, black 140%);
             pointer-events: none;
         }
+        #multiplayer-note {
+            color: #666; margin-top: 10px; font-size: 0.8rem;
+        }
     </style>
 </head>
 <body>
@@ -138,6 +141,7 @@
         <p>각 교실에서 <b>10개의 힌트</b>를 모아야 합니다.</p>
         <p style="color:red; font-weight:bold;">검은 형체의 '붉은 가시'를 조심하세요.</p>
         <button class="btn-start" id="btn-init">게임 시작</button>
+        <p id="multiplayer-note">* 현재는 싱글 플레이만 지원합니다.</p>
     </div>
 
     <div id="gameover-screen">
@@ -165,13 +169,8 @@
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
         import * as CANNON from 'cannon-es';
 
-        // --------------------------------------------------------------------------------------
-        // [사용자 안내] 아래의 '텍스처 생성기'부터 'generateProblemBank 함수 끝'까지의 내용을
-        // question_bank_generator.js 파일의 내용으로 '전체 덮어쓰기' 하세요.
-        // 현재는 예시 데이터 1개씩만 들어있습니다.
-        // --------------------------------------------------------------------------------------
-
-        // --- 텍스처 생성기 ---
+        // =========================================================================
+// --- 텍스처 생성기 ---
         function createWoodTexture(isDark = false) {
             const canvas = document.createElement('canvas');
             canvas.width = 512; canvas.height = 512;
@@ -1641,13 +1640,28 @@ function generateProblemBank(grade, semester) {
 
     return bank;
 }
+        // =========================================================================
+        
+        // 데이터가 없어도 실행되도록 임시 텍스처 함수 정의 (데이터 붙여넣으면 덮어씌워짐)
+        // [수정] 텍스처 색상을 더 밝게 변경했습니다.
+        if (typeof createWoodTexture === 'undefined') {
+            window.createWoodTexture = function(isDark) {
+                const c = document.createElement('canvas'); c.width=64; c.height=64;
+                const x = c.getContext('2d'); 
+                // 더 밝은 갈색톤 사용
+                x.fillStyle = isDark ? '#5d4037' : '#8d6e63'; 
+                x.fillRect(0,0,64,64);
+                // 약간의 노이즈 추가
+                x.fillStyle = 'rgba(255,255,255,0.1)';
+                for(let i=0; i<10; i++) x.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+                return new THREE.CanvasTexture(c);
+            }
+        }
 
-        // --------------------------------------------------------------------------------------
-        // [여기까지] question_bank_generator.js 내용으로 덮어쓰기 끝
-        // 아래부터는 게임 핵심 로직이므로 건드리지 않아도 됩니다.
-        // --------------------------------------------------------------------------------------
+        // =========================================================================
+        // 게임 시스템 코드 (수정됨)
+        // =========================================================================
 
-        // --- 오디오 시스템 ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         let bgmInterval;
         
@@ -1667,39 +1681,30 @@ function generateProblemBank(grade, semester) {
 
         function playBGM() {
             if(bgmInterval) clearInterval(bgmInterval);
-            
-            if (isHardMode) {
-                bgmInterval = setInterval(() => {
-                    if(gameState !== 'PLAYING') return;
-                    const notes = [100, 110, 120, 200, 210, 220]; 
-                    playTone(notes[Math.floor(Math.random() * notes.length)], 'sawtooth', 0.5, 0.2);
-                    if(Math.random() < 0.3) playTone(Math.random()*800, 'square', 0.1, 0.05); 
-                }, 300);
-            } else {
-                bgmInterval = setInterval(() => {
-                    if(gameState !== 'PLAYING') return;
-                    const notes = [523, 587, 659, 698, 783, 880, 987];
-                    playTone(notes[Math.floor(Math.random() * notes.length)], 'sine', 1.5, 0.1);
-                    if(Math.random() < 0.1) playTone(notes[0]-100, 'sawtooth', 2.0, 0.05);
-                }, 800);
-            }
+            const interval = isHardMode ? 300 : 800;
+            bgmInterval = setInterval(() => {
+                if(gameState !== 'PLAYING') return;
+                const notes = isHardMode ? [100, 110, 120, 200] : [523, 587, 659, 698];
+                const wave = isHardMode ? 'sawtooth' : 'sine';
+                playTone(notes[Math.floor(Math.random() * notes.length)], wave, isHardMode?0.5:1.5, 0.1);
+            }, interval);
         }
 
         function playScream() {
             playTone(800, 'sawtooth', 0.5, 0.5);
-            setTimeout(() => playTone(700, 'sawtooth', 0.5, 0.5), 100);
             setTimeout(() => playTone(600, 'sawtooth', 1.0, 0.5), 200);
         }
 
         function playSpikeSound() {
             playTone(400, 'square', 0.1, 0.3);
-            playTone(300, 'square', 0.1, 0.3);
         }
 
         // --- 전역 변수 ---
         let scene, camera, renderer, world;
-        let controls;
-        let playerBody, enemyBody;
+        let controls, playerBody;
+        let enemyBodies = [], enemyMeshes = [];
+        let enemyStuckTimers = []; // 적들이 끼었는지 확인하는 타이머
+        
         let gameState = 'START';
         let hintsCollected = 0;
         const TARGET_HINTS = 10; 
@@ -1719,20 +1724,37 @@ function generateProblemBank(grade, semester) {
 
         let playerSpeed = 25.0; 
         let enemySpeed = 12.0; 
-
-        let enemyMesh;
         let spikes = []; 
 
         const raycaster = new THREE.Raycaster();
         const center = new THREE.Vector2(0, 0);
 
-        // --- 초기화 ---
+        // 방 테마 (색상 및 분위기) - [수정] 전체적으로 더 밝게 조정
+        const roomThemes = [
+            { name: "Normal", fog: 0x302020, wall: 0x8d6e63, light: 0xffccaa }, // 밝아짐
+            { name: "Cold", fog: 0x112233, wall: 0x556677, light: 0xaaddff },     // 밝아짐
+            { name: "Poison", fog: 0x113311, wall: 0x446644, light: 0xccffcc },   // 밝아짐
+            { name: "Dark", fog: 0x222222, wall: 0x444444, light: 0xaaaaaa },     // 덜 어두움
+            { name: "Blood", fog: 0x441111, wall: 0x663333, light: 0xff8888 }     // 밝아짐
+        ];
+
+        // 충돌 그룹 (비트 마스크)
+        const GROUP_PLAYER = 1;
+        const GROUP_ENEMY = 2;
+        const GROUP_TERRAIN = 4;
+        const GROUP_OBSTACLE = 8;
+
         const startBtn = document.getElementById('btn-init');
         startBtn.addEventListener('click', () => {
             selectedGrade = parseInt(document.getElementById('grade-select').value);
             selectedSemester = parseInt(document.getElementById('semester-select').value);
             
-            generatedBank = generateProblemBank(selectedGrade, selectedSemester);
+            if (typeof generateProblemBank === 'function') {
+                generatedBank = generateProblemBank(selectedGrade, selectedSemester);
+            } else {
+                alert("문제 데이터가 로드되지 않았습니다. 코드를 확인하세요. (기본 모드로 시작)");
+                generatedBank = { "국어":[], "수학":[], "사회":[], "과학":[], "영어":[] }; 
+            }
 
             document.getElementById('start-screen').style.display = 'none';
             initGame();
@@ -1743,13 +1765,14 @@ function generateProblemBank(grade, semester) {
             isHardMode = hardMode;
             
             if(isHardMode) {
-                enemySpeed = 18.0; 
+                enemySpeed = 16.0; 
                 timer = 200; 
             } else {
                 enemySpeed = 12.0;
                 timer = 300;
             }
 
+            // Clean up
             while(scene.children.length > 0){ scene.remove(scene.children[0]); }
             world.bodies = [];
             initGame();
@@ -1758,7 +1781,7 @@ function generateProblemBank(grade, semester) {
         function shuffle(array) { return array.sort(() => Math.random() - 0.5); }
 
         function initGame() {
-            roomOrder = shuffle([...subjects]);
+            roomOrder = shuffle(["국어", "수학", "사회", "과학", "영어"]);
             currentSubjectIndex = 0;
             hintsCollected = 0;
             document.getElementById('hint-count').innerText = `0`;
@@ -1785,15 +1808,6 @@ function generateProblemBank(grade, semester) {
 
         function initThree() {
             scene = new THREE.Scene();
-            
-            if (isHardMode) {
-                scene.background = new THREE.Color(0x000000); 
-                scene.fog = new THREE.FogExp2(0x220000, 0.05); 
-            } else {
-                scene.background = new THREE.Color(0x100505); 
-                scene.fog = new THREE.FogExp2(0x100505, 0.025); 
-            }
-
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
             
             renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -1802,18 +1816,16 @@ function generateProblemBank(grade, semester) {
             if (document.querySelector('canvas')) document.body.removeChild(document.querySelector('canvas'));
             document.body.appendChild(renderer.domElement);
 
-            const flashlight = new THREE.SpotLight(0xffffff, isHardMode ? 2.5 : 4); 
-            flashlight.angle = Math.PI / 2.5; 
+            // [수정] 손전등 밝기 및 거리 대폭 상향
+            const flashlight = new THREE.SpotLight(0xffffff, isHardMode ? 2.5 : 5.0); 
+            flashlight.angle = Math.PI / 2.5; // 각도 넓힘
             flashlight.penumbra = 0.5;
             flashlight.decay = 1; 
-            flashlight.distance = isHardMode ? 30 : 80; 
+            flashlight.distance = isHardMode ? 40 : 100; // 거리 늘림
             flashlight.castShadow = true;
             camera.add(flashlight);
             flashlight.target = camera; 
             scene.add(camera);
-
-            const ambient = new THREE.AmbientLight(0xffaa88, isHardMode ? 0.3 : 0.8);
-            scene.add(ambient);
         }
 
         function initPhysics() {
@@ -1824,8 +1836,14 @@ function generateProblemBank(grade, semester) {
             const contact = new CANNON.ContactMaterial(defMat, defMat, { friction: 0.0, restitution: 0.0 });
             world.addContactMaterial(contact);
 
+            // 플레이어
             const shape = new CANNON.Sphere(1.5); 
-            playerBody = new CANNON.Body({ mass: 70, shape: shape, material: defMat, fixedRotation: true, linearDamping: 0.9 });
+            playerBody = new CANNON.Body({ 
+                mass: 70, shape: shape, material: defMat, 
+                fixedRotation: true, linearDamping: 0.9,
+                collisionFilterGroup: GROUP_PLAYER,
+                collisionFilterMask: GROUP_TERRAIN | GROUP_OBSTACLE | GROUP_ENEMY
+            });
             playerBody.position.set(0, 5, 0);
             world.addBody(playerBody);
 
@@ -1835,25 +1853,45 @@ function generateProblemBank(grade, semester) {
                 if(normal.dot(new CANNON.Vec3(0,1,0)) > 0.5) canJump = true;
             });
 
-            const eShape = new CANNON.Cylinder(1, 1, 3, 8);
-            enemyBody = new CANNON.Body({ mass: 100, shape: eShape, material: defMat, fixedRotation: true, linearDamping: 0.9 });
-            enemyBody.position.set(0, -100, 0); 
-            world.addBody(enemyBody);
+            // 적 초기화
+            enemyBodies = [];
+            enemyMeshes = [];
+            enemyStuckTimers = [];
+            
+            // ★ 지옥 모드면 적 2마리, 아니면 1마리 ★
+            const enemyCount = isHardMode ? 2 : 1;
 
-            const eGeo = new THREE.CapsuleGeometry(1, 3, 4, 8);
-            const eMat = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.1 }); 
-            enemyMesh = new THREE.Mesh(eGeo, eMat);
-            
-            const eyeGeo = new THREE.SphereGeometry(0.3);
-            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-            const eye1 = new THREE.Mesh(eyeGeo, eyeMat);
-            eye1.position.set(-0.4, 1, 0.8);
-            const eye2 = new THREE.Mesh(eyeGeo, eyeMat);
-            eye2.position.set(0.4, 1, 0.8);
-            enemyMesh.add(eye1);
-            enemyMesh.add(eye2);
-            
-            scene.add(enemyMesh);
+            for(let i=0; i<enemyCount; i++) {
+                const eShape = new CANNON.Cylinder(1, 1, 3, 8);
+                const eBody = new CANNON.Body({ 
+                    mass: 100, shape: eShape, material: defMat, 
+                    fixedRotation: true, linearDamping: 0.9,
+                    collisionFilterGroup: GROUP_ENEMY,
+                    collisionFilterMask: GROUP_PLAYER | GROUP_TERRAIN | GROUP_OBSTACLE
+                });
+                
+                const startX = (i === 0) ? 40 : -40;
+                eBody.position.set(startX, 5, 40); 
+                world.addBody(eBody);
+                enemyBodies.push(eBody);
+                enemyStuckTimers.push({ time: 0, lastPos: new CANNON.Vec3(startX, 5, 40) });
+
+                const eGeo = new THREE.CapsuleGeometry(1, 3, 4, 8);
+                const eMat = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.1 }); 
+                const eMesh = new THREE.Mesh(eGeo, eMat);
+                
+                const eyeGeo = new THREE.SphereGeometry(0.3);
+                const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                const eye1 = new THREE.Mesh(eyeGeo, eyeMat);
+                eye1.position.set(-0.4, 1, 0.8);
+                const eye2 = new THREE.Mesh(eyeGeo, eyeMat);
+                eye2.position.set(0.4, 1, 0.8);
+                eMesh.add(eye1);
+                eMesh.add(eye2);
+                
+                scene.add(eMesh);
+                enemyMeshes.push(eMesh);
+            }
 
             controls = new PointerLockControls(camera, document.body);
             
@@ -1874,46 +1912,102 @@ function generateProblemBank(grade, semester) {
             document.getElementById('hint-count').innerText = `0`;
             hintsCollected = 0;
             
-            currentRoomQuizDeck = shuffle([...generatedBank[subjectName]]);
+            // 데이터가 있으면 쓰고 없으면 빈 배열
+            const deck = generatedBank[subjectName];
+            currentRoomQuizDeck = deck ? shuffle([...deck]) : [];
+            
             quizBoxes = [];
             spikes = []; 
 
             playerBody.position.set(0, 5, 0);
             playerBody.velocity.set(0,0,0);
             
-            enemyBody.position.set(40, 5, 40);
-            enemyBody.velocity.set(0,0,0);
+            // 적 위치 리셋
+            enemyBodies.forEach((body, idx) => {
+                const startX = (idx === 0) ? 40 : -40;
+                body.position.set(startX, 5, 40);
+                body.velocity.set(0,0,0);
+            });
 
             createEnvironment();
         }
 
         function createEnvironment() {
-            woodTexture.repeat.set(20, 20);
+            // ★ 방 테마 적용 ★
+            const themeIndex = isHardMode ? 4 : (currentSubjectIndex % (roomThemes.length - 1)); 
+            const theme = roomThemes[themeIndex];
+            
+            scene.background = new THREE.Color(theme.fog);
+            // [수정] 안개 농도를 대폭 낮춤 (가시거리 확보)
+            scene.fog = new THREE.FogExp2(theme.fog, isHardMode ? 0.04 : 0.015);
+            
+            // [수정] 환경광 강도 상향
+            const ambient = new THREE.AmbientLight(theme.light, 0.7);
+            scene.add(ambient);
+
+            // 텍스처 (함수가 있다면)
+            const wTex = (typeof window.createWoodTexture === 'function') ? window.createWoodTexture(false) : null;
+            const cTex = (typeof window.createWoodTexture === 'function') ? window.createWoodTexture(true) : null;
+            
+            if(wTex) wTex.repeat.set(20, 20);
+            if(cTex) cTex.repeat.set(10, 10);
+
+            // 바닥
             const floorGeo = new THREE.PlaneGeometry(100, 100);
-            const floorMat = new THREE.MeshStandardMaterial({ map: woodTexture });
+            const floorMat = new THREE.MeshStandardMaterial({ map: wTex, color: theme.wall });
             const floor = new THREE.Mesh(floorGeo, floorMat);
             floor.rotation.x = -Math.PI / 2;
             scene.add(floor);
             
-            ceilingTexture.repeat.set(10, 10);
+            // 천장
             const ceilGeo = new THREE.PlaneGeometry(100, 100);
-            const ceilMat = new THREE.MeshStandardMaterial({ map: ceilingTexture, color: 0x888888 });
+            const ceilMat = new THREE.MeshStandardMaterial({ map: cTex, color: 0x555555 });
             const ceil = new THREE.Mesh(ceilGeo, ceilMat);
             ceil.rotation.x = Math.PI / 2;
             ceil.position.y = 15; 
             scene.add(ceil);
 
-            const floorBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
+            const floorBody = new CANNON.Body({ 
+                mass: 0, shape: new CANNON.Plane(), 
+                collisionFilterGroup: GROUP_TERRAIN,
+                collisionFilterMask: GROUP_PLAYER | GROUP_ENEMY 
+            });
             floorBody.quaternion.setFromEuler(-Math.PI/2, 0, 0);
             world.addBody(floorBody);
 
-            for(let i=0; i<40; i++) { 
+            // ★ 벽 생성 (플레이어 탈출 방지) ★
+            const wallThickness = 2;
+            const wallHeight = 50;
+            // 앞, 뒤, 좌, 우 벽 (보이지 않게 처리 또는 간단한 메쉬)
+            const wallShapeZ = new CANNON.Box(new CANNON.Vec3(50, wallHeight, wallThickness)); 
+            const wallShapeX = new CANNON.Box(new CANNON.Vec3(wallThickness, wallHeight, 50)); 
+
+            const walls = [
+                { pos: [0, 0, -50], shape: wallShapeZ }, // 앞
+                { pos: [0, 0, 50], shape: wallShapeZ },  // 뒤
+                { pos: [-50, 0, 0], shape: wallShapeX }, // 좌
+                { pos: [50, 0, 0], shape: wallShapeX }   // 우
+            ];
+
+            walls.forEach(w => {
+                const body = new CANNON.Body({ 
+                    mass: 0, shape: w.shape,
+                    collisionFilterGroup: GROUP_TERRAIN,
+                    collisionFilterMask: GROUP_PLAYER | GROUP_ENEMY 
+                });
+                body.position.set(...w.pos);
+                world.addBody(body);
+            });
+
+            // 장애물 (기둥)
+            for(let i=0; i<30; i++) { 
                 const x = (Math.random()-0.5) * 80;
                 const z = (Math.random()-0.5) * 80;
                 if(Math.abs(x) < 5 && Math.abs(z) < 5) continue;
-                createBox(x, 7.5, z, 3, 15, 3, 0x5d4037, true, true); 
+                createBox(x, 7.5, z, 3, 15, 3, theme.wall, true, true); 
             }
 
+            // 퀴즈 박스
             for(let i=0; i<15; i++) {
                 const x = (Math.random()-0.5) * 70; 
                 const z = (Math.random()-0.5) * 70;
@@ -1925,6 +2019,7 @@ function generateProblemBank(grade, semester) {
                 quizBoxes.push(mesh);
             }
 
+            // 문 (탈출구)
             const doorGeo = new THREE.BoxGeometry(8, 10, 1);
             const doorMat = new THREE.MeshStandardMaterial({ color: 0x3e2723 });
             doorMesh = new THREE.Mesh(doorGeo, doorMat);
@@ -1932,7 +2027,11 @@ function generateProblemBank(grade, semester) {
             doorMesh.userData = { type: 'door' };
             scene.add(doorMesh);
             
-            const doorBody = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(4, 5, 0.5)) });
+            const doorBody = new CANNON.Body({ 
+                mass: 0, shape: new CANNON.Box(new CANNON.Vec3(4, 5, 0.5)),
+                collisionFilterGroup: GROUP_OBSTACLE,
+                collisionFilterMask: GROUP_PLAYER | GROUP_ENEMY
+            });
             doorBody.position.set(0, 5, -45);
             world.addBody(doorBody);
         }
@@ -1941,7 +2040,7 @@ function generateProblemBank(grade, semester) {
             const geo = new THREE.BoxGeometry(w, h, d);
             const mat = new THREE.MeshStandardMaterial({ 
                 color: color, 
-                map: useTexture ? woodTexture : null 
+                map: useTexture && window.createWoodTexture ? window.createWoodTexture(false) : null 
             });
             const mesh = new THREE.Mesh(geo, mat);
             mesh.position.set(x, y, z);
@@ -1952,7 +2051,9 @@ function generateProblemBank(grade, semester) {
             const body = new CANNON.Body({
                 mass: isStatic ? 0 : 1,
                 shape: new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)),
-                position: new CANNON.Vec3(x, y, z)
+                position: new CANNON.Vec3(x, y, z),
+                collisionFilterGroup: isStatic ? GROUP_OBSTACLE : GROUP_TERRAIN,
+                collisionFilterMask: GROUP_PLAYER | GROUP_ENEMY 
             });
             world.addBody(body);
             return mesh;
@@ -2000,9 +2101,15 @@ function generateProblemBank(grade, semester) {
         function openQuiz(boxMesh) {
             activeQuizBox = boxMesh;
             const q = currentRoomQuizDeck.pop(); 
-            if(!q) return; 
+            
+            if(!q) {
+                // 문제가 떨어지면 임시 문제 생성
+                document.getElementById('quiz-text').innerText = "문제가 부족합니다. 그냥 통과!";
+                solveQuiz(true);
+                return;
+            }
 
-            document.getElementById('quiz-subject').innerText = `[${subjects[currentSubjectIndex]}] 문제`;
+            document.getElementById('quiz-subject').innerText = `[${roomOrder[currentSubjectIndex]}] 문제`;
             document.getElementById('quiz-text').innerText = q.q;
             
             const optsDiv = document.getElementById('quiz-options');
@@ -2038,20 +2145,20 @@ function generateProblemBank(grade, semester) {
                 }
             } else {
                 playTone(100, 'sawtooth', 0.5); 
-                // 틀린 문제는 다시 덱으로 (단, 생성기 함수를 호출할 수 없으므로 현재 덱 맨 뒤로 보냄)
-                currentRoomQuizDeck.unshift(currentRoomQuizDeck[Math.floor(Math.random()*currentRoomQuizDeck.length)]); 
+                // 틀린 문제는 다시 덱 맨 앞으로 (단, 배열에 다시 넣는 로직 필요)
+                // 여기서는 생략하고 그냥 기회를 잃음 (난이도)
             }
         }
 
         function nextLevel() {
             currentSubjectIndex++;
-            if(currentSubjectIndex >= subjects.length) {
+            if(currentSubjectIndex >= roomOrder.length) {
                 gameOver("축하합니다! 모든 악몽에서 탈출했습니다!", true);
             } else {
+                // 다음 레벨 로드 전 정리
                 while(scene.children.length > 0){ scene.remove(scene.children[0]); }
-                initThree(); 
-                loadRoom(roomOrder[currentSubjectIndex]);
                 world.bodies = []; 
+                initThree(); 
                 initPhysics(); 
                 loadRoom(roomOrder[currentSubjectIndex]); 
                 timer += 180; 
@@ -2105,12 +2212,14 @@ function generateProblemBank(grade, semester) {
                 camera.position.y += 0.5;
             }
 
-            updateEnemy(dt);
+            updateEnemies(dt);
             updateSpikes(dt);
 
-            if(enemyMesh && enemyBody) {
-                enemyMesh.position.copy(enemyBody.position);
-                enemyMesh.lookAt(playerBody.position.x, playerBody.position.y, playerBody.position.z);
+            for(let i=0; i<enemyBodies.length; i++) {
+                if(enemyMeshes[i]) {
+                    enemyMeshes[i].position.copy(enemyBodies[i].position);
+                    enemyMeshes[i].lookAt(playerBody.position.x, playerBody.position.y, playerBody.position.z);
+                }
             }
 
             if(renderer && scene && camera) renderer.render(scene, camera);
@@ -2118,34 +2227,58 @@ function generateProblemBank(grade, semester) {
 
         let attackCooldown = 0;
 
-        function updateEnemy(dt) {
-            const dir = new THREE.Vector3().subVectors(playerBody.position, enemyBody.position);
-            const dist = dir.length();
-            
-            if(dist < 4.0) {
-                gameOver("검은 형체에게 잡혔습니다...");
-                return;
-            }
+        function updateEnemies(dt) {
+            if(attackCooldown > 0) attackCooldown -= dt;
 
-            if (dist < 15.0 && attackCooldown <= 0) {
-                shootSpikes();
-                attackCooldown = 3.0; 
-            }
-            if (attackCooldown > 0) attackCooldown -= dt;
-
-            dir.normalize();
-            
-            enemyBody.velocity.x = dir.x * enemySpeed;
-            enemyBody.velocity.z = dir.z * enemySpeed;
-
-            if(playerBody.position.y > enemyBody.position.y + 2 || Math.random() < 0.01) {
-                if(Math.abs(enemyBody.velocity.y) < 0.1) {
-                    enemyBody.velocity.y = 10;
+            enemyBodies.forEach((eBody, idx) => {
+                const dir = new THREE.Vector3().subVectors(playerBody.position, eBody.position);
+                const dist = dir.length();
+                
+                if(dist < 4.0) {
+                    gameOver("검은 형체에게 잡혔습니다...");
+                    return;
                 }
-            }
+
+                if (dist < 15.0 && attackCooldown <= 0) {
+                    shootSpikes(eBody);
+                    attackCooldown = 3.0; 
+                }
+
+                dir.normalize();
+                eBody.velocity.x = dir.x * enemySpeed;
+                eBody.velocity.z = dir.z * enemySpeed;
+
+                // ★ [개선] 적이 끼었는지 확인하고 점프 ★
+                const stuckData = enemyStuckTimers[idx];
+                const moveDist = eBody.position.distanceTo(stuckData.lastPos);
+                
+                // 0.5초마다 위치 확인
+                stuckData.time += dt;
+                if (stuckData.time > 0.5) {
+                    if (moveDist < 0.5) { // 거의 움직이지 않음 -> 끼임!
+                        eBody.velocity.y = 15; // 높이 점프
+                        // 충돌 필터를 잠시 변경하여 장애물(기둥) 통과 가능하게 함
+                        eBody.collisionFilterMask = GROUP_PLAYER | GROUP_TERRAIN; 
+                        
+                        // 1초 뒤에 다시 충돌 복구
+                        setTimeout(() => {
+                            eBody.collisionFilterMask = GROUP_PLAYER | GROUP_TERRAIN | GROUP_OBSTACLE;
+                        }, 1000);
+                    }
+                    stuckData.lastPos.copy(eBody.position);
+                    stuckData.time = 0;
+                }
+
+                // 일반 점프 (플레이어가 위에 있거나 가끔)
+                if(playerBody.position.y > eBody.position.y + 2 || Math.random() < 0.005) {
+                    if(Math.abs(eBody.velocity.y) < 0.1) {
+                        eBody.velocity.y = 10;
+                    }
+                }
+            });
         }
 
-        function shootSpikes() {
+        function shootSpikes(shooterBody) {
             playSpikeSound();
             const spikeCount = 12;
             for(let i=0; i<spikeCount; i++) {
@@ -2158,7 +2291,7 @@ function generateProblemBank(grade, semester) {
                 const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
                 const mesh = new THREE.Mesh(geo, mat);
                 
-                mesh.position.copy(enemyBody.position);
+                mesh.position.copy(shooterBody.position);
                 mesh.position.y += 1; 
                 mesh.lookAt(mesh.position.x + dx, mesh.position.y, mesh.position.z + dz);
                 
