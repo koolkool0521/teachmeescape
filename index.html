@@ -145,7 +145,9 @@
             font-weight: bold; color: white; pointer-events: auto; touch-action: none;
             display: flex; justify-content: center; align-items: center; font-size: 1.2rem;
         }
+        /* 점프 버튼 위치 */
         #btn-jump { bottom: 60px; right: 40px; background: rgba(255, 0, 0, 0.3); }
+        /* 조사 버튼 위치 */
         #btn-interact { bottom: 160px; right: 40px; background: rgba(0, 0, 255, 0.3); font-size: 1rem; }
         
         /* 시점 변환 영역 (화면 오른쪽 절반) */
@@ -157,7 +159,7 @@
 </head>
 <body>
 
-    <div id="damage-overlay"></div> <!-- 붉은 시야 효과 -->
+    <div id="damage-overlay"></div>
 
     <div id="ui-layer">
         <div class="vignette"></div>
@@ -172,10 +174,11 @@
     </div>
 
     <!-- 모바일 컨트롤 (JS에서 활성화) -->
+    <!-- [수정] 버튼에 class="mobile-btn" 추가하여 스타일 적용 -->
     <div id="mobile-controls">
         <div id="joystick-zone"><div id="joystick-knob"></div></div>
-        <div id="btn-interact">조사</div>
-        <div id="btn-jump">JUMP</div>
+        <div id="btn-interact" class="mobile-btn">조사</div>
+        <div id="btn-jump" class="mobile-btn">JUMP</div>
         <!-- 우측 절반은 시점 변환용 투명 영역 -->
         <div id="touch-look-zone"></div>
     </div>
@@ -237,7 +240,8 @@
 
         // =========================================================================
         // ★ [이곳에 문제 데이터 코드(question_bank_generator.js 등)를 붙여넣으세요] ★
-       // --- 텍스처 생성기 ---
+
+        // --- 텍스처 생성기 ---
         function createWoodTexture(isDark = false) {
             const canvas = document.createElement('canvas');
             canvas.width = 512; canvas.height = 512;
@@ -1802,6 +1806,9 @@ function generateProblemBank(grade, semester) {
         // 모바일 입력 변수
         const joystick = { x: 0, y: 0, active: false };
         const touchLook = { x: 0, y: 0, active: false, lastX: 0, lastY: 0 };
+        // [수정] 멀티 터치용 ID 추적
+        let joyTouchId = null;
+        let lookTouchId = null;
 
         const roomThemes = [
             { name: "Normal", fog: 0x302020, wall: 0x8d6e63, light: 0xffccaa },
@@ -1830,7 +1837,6 @@ function generateProblemBank(grade, semester) {
 
             document.getElementById('start-screen').style.display = 'none';
             
-            // 모바일이면 모바일 UI 표시
             if (isMobile) {
                 document.getElementById('mobile-controls').style.display = 'block';
                 document.getElementById('interact-msg').innerText = "[조사] 버튼을 누르세요";
@@ -1839,7 +1845,7 @@ function generateProblemBank(grade, semester) {
             initGame();
         });
 
-        // 모바일 컨트롤 이벤트 리스너
+        // [수정] 모바일 컨트롤 이벤트 리스너 (멀티 터치 지원)
         if (isMobile) {
             const joyZone = document.getElementById('joystick-zone');
             const joyKnob = document.getElementById('joystick-knob');
@@ -1847,23 +1853,37 @@ function generateProblemBank(grade, semester) {
             const jumpBtn = document.getElementById('btn-jump');
             const interactBtn = document.getElementById('btn-interact');
 
-            // 조이스틱 로직
+            // --- 조이스틱 (이동) ---
             joyZone.addEventListener('touchstart', (e) => {
                 e.preventDefault();
+                const touch = e.changedTouches[0];
+                joyTouchId = touch.identifier;
                 joystick.active = true;
-                handleJoystick(e.touches[0]);
+                handleJoystick(touch);
             }, {passive: false});
 
             joyZone.addEventListener('touchmove', (e) => {
                 e.preventDefault();
-                if(joystick.active) handleJoystick(e.touches[0]);
+                if (!joystick.active) return;
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === joyTouchId) {
+                        handleJoystick(e.changedTouches[i]);
+                        break;
+                    }
+                }
             }, {passive: false});
 
             joyZone.addEventListener('touchend', (e) => {
                 e.preventDefault();
-                joystick.active = false;
-                joystick.x = 0; joystick.y = 0;
-                joyKnob.style.transform = `translate(0px, 0px)`;
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === joyTouchId) {
+                        joystick.active = false;
+                        joyTouchId = null;
+                        joystick.x = 0; joystick.y = 0;
+                        joyKnob.style.transform = `translate(0px, 0px)`;
+                        break;
+                    }
+                }
             });
 
             function handleJoystick(touch) {
@@ -1875,7 +1895,7 @@ function generateProblemBank(grade, semester) {
                 let dy = touch.clientY - centerY;
                 
                 const dist = Math.sqrt(dx*dx + dy*dy);
-                const maxDist = 40; // 노브 이동 제한
+                const maxDist = 40; 
                 
                 if (dist > maxDist) {
                     dx = (dx / dist) * maxDist;
@@ -1884,51 +1904,62 @@ function generateProblemBank(grade, semester) {
                 
                 joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
                 
-                // 정규화된 입력값 (-1 ~ 1)
                 joystick.x = dx / maxDist;
                 joystick.y = dy / maxDist;
             }
 
-            // 시점 변환 로직
+            // --- 화면 드래그 (시점 변환) ---
             lookZone.addEventListener('touchstart', (e) => {
-                // e.preventDefault(); // 스크롤 방지
+                // e.preventDefault(); // 기본 동작 유지 (필요시)
+                const touch = e.changedTouches[0];
+                lookTouchId = touch.identifier;
                 touchLook.active = true;
-                touchLook.lastX = e.touches[0].clientX;
-                touchLook.lastY = e.touches[0].clientY;
+                touchLook.lastX = touch.clientX;
+                touchLook.lastY = touch.clientY;
             });
 
             lookZone.addEventListener('touchmove', (e) => {
-                // e.preventDefault();
                 if (touchLook.active) {
-                    const clientX = e.touches[0].clientX;
-                    const clientY = e.touches[0].clientY;
-                    
-                    const deltaX = clientX - touchLook.lastX;
-                    const deltaY = clientY - touchLook.lastY;
-                    
-                    // 회전 적용 (카메라 직접 회전)
-                    // PointerLockControls는 객체를 Y축 회전, 카메라를 X축 회전시킴
-                    if (camera) {
-                        const sensitivity = 0.005;
-                        // 좌우 회전 (Player Body 회전 X -> 카메라 회전)
-                        // 하지만 이동 방향 계산을 위해 보통 Player Body나 Container를 회전시킴.
-                        // 여기선 PointerLockControls 내부 객체(yawObject)를 흉내내거나 직접 카메라 회전.
-                        // PointerLockControls가 있다면 그것의 API를 쓰는 게 좋지만 모바일에서 lock 안 됨.
-                        
-                        // 직접 회전 구현
-                        camera.rotation.y -= deltaX * sensitivity;
-                        camera.rotation.x -= deltaY * sensitivity;
-                        
-                        // X축 회전 제한 (위아래)
-                        camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+                    let touch = null;
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        if (e.changedTouches[i].identifier === lookTouchId) {
+                            touch = e.changedTouches[i];
+                            break;
+                        }
                     }
+                    
+                    if (touch) {
+                        const clientX = touch.clientX;
+                        const clientY = touch.clientY;
+                        
+                        const deltaX = clientX - touchLook.lastX;
+                        const deltaY = clientY - touchLook.lastY;
+                        
+                        if (camera) {
+                            const sensitivity = 0.005;
+                            // Y축(좌우) 회전은 그대로, X축(상하) 회전
+                            camera.rotation.y -= deltaX * sensitivity;
+                            camera.rotation.x -= deltaY * sensitivity;
+                            
+                            // 상하 각도 제한
+                            camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+                        }
 
-                    touchLook.lastX = clientX;
-                    touchLook.lastY = clientY;
+                        touchLook.lastX = clientX;
+                        touchLook.lastY = clientY;
+                    }
                 }
             });
 
-            lookZone.addEventListener('touchend', () => { touchLook.active = false; });
+            lookZone.addEventListener('touchend', (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === lookTouchId) {
+                        touchLook.active = false;
+                        lookTouchId = null;
+                        break;
+                    }
+                }
+            });
 
             // 점프 버튼
             jumpBtn.addEventListener('touchstart', (e) => {
@@ -1939,7 +1970,7 @@ function generateProblemBank(grade, semester) {
                 }
             });
 
-            // 상호작용 버튼
+            // 조사 버튼
             interactBtn.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 checkInteraction(true);
@@ -2024,7 +2055,7 @@ function generateProblemBank(grade, semester) {
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
             
-            // 모바일에서 시점 회전 순서를 YXZ로 설정 (좌우 회전 후 상하 회전 적용을 위해)
+            // 모바일에서 시점 회전 순서를 YXZ로 설정
             camera.rotation.order = 'YXZ';
 
             renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -2106,7 +2137,7 @@ function generateProblemBank(grade, semester) {
                 enemyMeshes.push(eMesh);
             }
 
-            // PC용 PointerLock (모바일이 아닐 때만)
+            // PC용 PointerLock
             if (!isMobile) {
                 controls = new PointerLockControls(camera, document.body);
                 document.body.addEventListener('click', () => {
@@ -2333,14 +2364,12 @@ function generateProblemBank(grade, semester) {
                 optsDiv.appendChild(btn);
             });
 
-            // 모바일이 아닐 때만 언락 (모바일은 터치이므로 상관없음)
             if(!isMobile && controls) controls.unlock();
             document.getElementById('quiz-modal').style.display = 'block';
         }
 
         function solveQuiz(isCorrect) {
             document.getElementById('quiz-modal').style.display = 'none';
-            // PC: 락, 모바일: 패스
             if(!isMobile && controls) controls.lock(); 
 
             if(isCorrect) {
@@ -2396,7 +2425,6 @@ function generateProblemBank(grade, semester) {
             let inputX = 0;
             let inputZ = 0;
 
-            // PC 입력
             if (!isMobile && controls && controls.isLocked) {
                 const direction = new THREE.Vector3();
                 camera.getWorldDirection(direction);
@@ -2417,11 +2445,7 @@ function generateProblemBank(grade, semester) {
                 }
                 checkInteraction(false);
             }
-            // 모바일 입력
             else if (isMobile) {
-                // Joystick input (x, y are normalized -1 to 1)
-                // Joystick Y is up/down (Z in 3D), X is left/right (X in 3D relative to camera)
-                // But we need to move relative to Camera LOOK direction
                 const direction = new THREE.Vector3();
                 camera.getWorldDirection(direction);
                 direction.y = 0; 
@@ -2430,24 +2454,17 @@ function generateProblemBank(grade, semester) {
                 const side = new THREE.Vector3();
                 side.crossVectors(camera.up, direction).normalize(); 
 
-                // Joystick Y maps to Forward/Back (direction)
-                // Joystick Y is negative when up? CSS translate is positive down.
-                // handleJoystick: dy is positive down. So up is negative dy.
-                // So negative dy means forward.
+                // [수정] 조이스틱 좌우 반전 해결 (x값을 반전)
                 const fwd = -joystick.y; 
-                const right = joystick.x;
+                const right = -joystick.x; // 좌우 반전
 
                 inputX += direction.x * fwd + side.x * right;
                 inputZ += direction.z * fwd + side.z * right;
             }
 
-            // Apply Velocity
             if (inputX !== 0 || inputZ !== 0) {
-                // Normalize vector if needed to prevent faster diagonal movement, 
-                // but joystick is circular clamped so maybe ok.
-                // Just clamp to 1 length if using keyboard
                 const len = Math.sqrt(inputX*inputX + inputZ*inputZ);
-                if (len > 1 && !isMobile) { inputX/=len; inputZ/=len; } // Normalize keyboard
+                if (len > 1 && !isMobile) { inputX/=len; inputZ/=len; } 
                 
                 playerBody.velocity.x = inputX * playerSpeed;
                 playerBody.velocity.z = inputZ * playerSpeed;
