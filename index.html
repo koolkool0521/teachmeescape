@@ -9,6 +9,16 @@
         
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
         
+        /* 피격 효과 (붉은 화면) */
+        #damage-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, transparent 50%, red 150%);
+            opacity: 0;
+            transition: opacity 0.5s;
+            pointer-events: none;
+            z-index: 5;
+        }
+
         #crosshair {
             position: absolute; top: 50%; left: 50%;
             width: 8px; height: 8px;
@@ -22,7 +32,13 @@
             position: absolute; top: 20px; left: 20px;
             color: #ff3333; font-size: 1.5rem; font-weight: bold;
             text-shadow: 2px 2px 0 #000;
+            line-height: 1.5;
         }
+        
+        /* 목숨 표시 스타일 */
+        .heart { color: red; font-size: 1.8rem; }
+        .heart-lost { color: #333; }
+
         #timer-box {
             position: absolute; top: 20px; right: 20px;
             color: #fff; font-size: 2rem; font-weight: bold;
@@ -43,6 +59,7 @@
             color: #d7ccc8; pointer-events: auto;
             text-align: center;
             box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+            z-index: 20;
         }
         #quiz-modal h2 { margin-top: 0; color: #ff5555; border-bottom: 1px solid #5d4037; padding-bottom: 10px; }
         .quiz-btn {
@@ -103,12 +120,15 @@
 </head>
 <body>
 
+    <div id="damage-overlay"></div> <!-- 붉은 시야 효과 -->
+
     <div id="ui-layer">
         <div class="vignette"></div>
         <div id="crosshair"></div>
         <div id="hud">
             교실: <span id="room-name">대기실</span><br>
-            힌트: <span id="hint-count">0</span> / 10
+            힌트: <span id="hint-count">0</span> / 10<br>
+            목숨: <span id="life-display">❤❤❤❤❤</span>
         </div>
         <div id="timer-box">05:00</div>
         <div id="interact-msg">[클릭] 조사하기</div>
@@ -118,7 +138,7 @@
         <h2 id="quiz-subject">문제</h2>
         <p id="quiz-text" style="font-size:1.3rem; margin-bottom:20px; line-height: 1.4;"></p>
         <div id="quiz-options"></div>
-        <p style="color:#a1887f; font-size:0.8rem; margin-top:10px;">⚠️ 문제를 푸는 동안에도 '그것'은 다가옵니다...</p>
+        <p style="color:#a1887f; font-size:0.8rem; margin-top:10px;">⚠️ 틀리면 목숨이 줄어듭니다! 신중하세요.</p>
     </div>
 
     <div id="start-screen">
@@ -139,7 +159,7 @@
         </div>
 
         <p>각 교실에서 <b>10개의 힌트</b>를 모아야 합니다.</p>
-        <p style="color:red; font-weight:bold;">검은 형체의 '붉은 가시'를 조심하세요.</p>
+        <p style="color:red; font-weight:bold;">문제를 틀리면 생명이 줄어듭니다!</p>
         <button class="btn-start" id="btn-init">게임 시작</button>
         <p id="multiplayer-note">* 현재는 싱글 플레이만 지원합니다.</p>
     </div>
@@ -149,7 +169,7 @@
         <p id="death-reason" style="font-size:1.5rem;">...</p>
         <div class="btn-group">
             <button class="btn-retry" onclick="restartGame(false)">다시 시도</button>
-            <button class="btn-giveup" onclick="restartGame(true)">포기하기</button>
+            <button class="btn-giveup" onclick="restartGame(true)">포기... (지옥으로)</button>
         </div>
     </div>
 
@@ -169,6 +189,8 @@
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
         import * as CANNON from 'cannon-es';
 
+        // =========================================================================
+        // ★ [이곳에 문제 데이터 코드(question_bank_generator.js 등)를 붙여넣으세요] ★
         // =========================================================================
 // --- 텍스처 생성기 ---
         function createWoodTexture(isDark = false) {
@@ -1640,26 +1662,22 @@ function generateProblemBank(grade, semester) {
 
     return bank;
 }
+
         // =========================================================================
         
         // 데이터가 없어도 실행되도록 임시 텍스처 함수 정의 (데이터 붙여넣으면 덮어씌워짐)
-        // [수정] 텍스처 색상을 더 밝게 변경했습니다.
         if (typeof createWoodTexture === 'undefined') {
             window.createWoodTexture = function(isDark) {
                 const c = document.createElement('canvas'); c.width=64; c.height=64;
                 const x = c.getContext('2d'); 
-                // 더 밝은 갈색톤 사용
                 x.fillStyle = isDark ? '#5d4037' : '#8d6e63'; 
                 x.fillRect(0,0,64,64);
-                // 약간의 노이즈 추가
-                x.fillStyle = 'rgba(255,255,255,0.1)';
-                for(let i=0; i<10; i++) x.fillRect(Math.random()*64, Math.random()*64, 2, 2);
                 return new THREE.CanvasTexture(c);
             }
         }
 
         // =========================================================================
-        // 게임 시스템 코드 (수정됨)
+        // 게임 시스템 코드
         // =========================================================================
 
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1703,10 +1721,12 @@ function generateProblemBank(grade, semester) {
         let scene, camera, renderer, world;
         let controls, playerBody;
         let enemyBodies = [], enemyMeshes = [];
-        let enemyStuckTimers = []; // 적들이 끼었는지 확인하는 타이머
+        let enemyStuckTimers = []; 
         
         let gameState = 'START';
         let hintsCollected = 0;
+        let playerLives = 5; // ★ 목숨 변수 추가
+        const MAX_LIVES = 5;
         const TARGET_HINTS = 10; 
         let timer = 300; 
         let quizBoxes = [];
@@ -1729,16 +1749,14 @@ function generateProblemBank(grade, semester) {
         const raycaster = new THREE.Raycaster();
         const center = new THREE.Vector2(0, 0);
 
-        // 방 테마 (색상 및 분위기) - [수정] 전체적으로 더 밝게 조정
         const roomThemes = [
-            { name: "Normal", fog: 0x302020, wall: 0x8d6e63, light: 0xffccaa }, // 밝아짐
-            { name: "Cold", fog: 0x112233, wall: 0x556677, light: 0xaaddff },     // 밝아짐
-            { name: "Poison", fog: 0x113311, wall: 0x446644, light: 0xccffcc },   // 밝아짐
-            { name: "Dark", fog: 0x222222, wall: 0x444444, light: 0xaaaaaa },     // 덜 어두움
-            { name: "Blood", fog: 0x441111, wall: 0x663333, light: 0xff8888 }     // 밝아짐
+            { name: "Normal", fog: 0x302020, wall: 0x8d6e63, light: 0xffccaa },
+            { name: "Cold", fog: 0x112233, wall: 0x556677, light: 0xaaddff },
+            { name: "Poison", fog: 0x113311, wall: 0x446644, light: 0xccffcc },
+            { name: "Dark", fog: 0x222222, wall: 0x444444, light: 0xaaaaaa },
+            { name: "Blood", fog: 0x441111, wall: 0x663333, light: 0xff8888 }
         ];
 
-        // 충돌 그룹 (비트 마스크)
         const GROUP_PLAYER = 1;
         const GROUP_ENEMY = 2;
         const GROUP_TERRAIN = 4;
@@ -1772,7 +1790,6 @@ function generateProblemBank(grade, semester) {
                 timer = 300;
             }
 
-            // Clean up
             while(scene.children.length > 0){ scene.remove(scene.children[0]); }
             world.bodies = [];
             initGame();
@@ -1780,11 +1797,29 @@ function generateProblemBank(grade, semester) {
 
         function shuffle(array) { return array.sort(() => Math.random() - 0.5); }
 
+        function updateLifeUI() {
+            let html = "";
+            // 목숨 수만큼 빨간 하트, 잃은 만큼 검은 하트
+            for(let i=0; i<MAX_LIVES; i++) {
+                if (i < playerLives) html += "<span class='heart'>❤</span>";
+                else html += "<span class='heart-lost'>❤</span>";
+            }
+            document.getElementById('life-display').innerHTML = html;
+
+            // ★ 시야 붉게 만들기 (Overlay Opacity)
+            // 목숨이 적을수록 불투명도 증가 (최대 0.7)
+            const damageRatio = (MAX_LIVES - playerLives) / MAX_LIVES;
+            document.getElementById('damage-overlay').style.opacity = damageRatio * 0.7;
+        }
+
         function initGame() {
             roomOrder = shuffle(["국어", "수학", "사회", "과학", "영어"]);
             currentSubjectIndex = 0;
             hintsCollected = 0;
+            playerLives = MAX_LIVES; // 목숨 초기화
+            
             document.getElementById('hint-count').innerText = `0`;
+            updateLifeUI();
             
             initThree();
             initPhysics();
@@ -1816,12 +1851,11 @@ function generateProblemBank(grade, semester) {
             if (document.querySelector('canvas')) document.body.removeChild(document.querySelector('canvas'));
             document.body.appendChild(renderer.domElement);
 
-            // [수정] 손전등 밝기 및 거리 대폭 상향
             const flashlight = new THREE.SpotLight(0xffffff, isHardMode ? 2.5 : 5.0); 
-            flashlight.angle = Math.PI / 2.5; // 각도 넓힘
+            flashlight.angle = Math.PI / 2.5; 
             flashlight.penumbra = 0.5;
             flashlight.decay = 1; 
-            flashlight.distance = isHardMode ? 40 : 100; // 거리 늘림
+            flashlight.distance = isHardMode ? 40 : 100; 
             flashlight.castShadow = true;
             camera.add(flashlight);
             flashlight.target = camera; 
@@ -1836,7 +1870,6 @@ function generateProblemBank(grade, semester) {
             const contact = new CANNON.ContactMaterial(defMat, defMat, { friction: 0.0, restitution: 0.0 });
             world.addContactMaterial(contact);
 
-            // 플레이어
             const shape = new CANNON.Sphere(1.5); 
             playerBody = new CANNON.Body({ 
                 mass: 70, shape: shape, material: defMat, 
@@ -1853,12 +1886,10 @@ function generateProblemBank(grade, semester) {
                 if(normal.dot(new CANNON.Vec3(0,1,0)) > 0.5) canJump = true;
             });
 
-            // 적 초기화
             enemyBodies = [];
             enemyMeshes = [];
             enemyStuckTimers = [];
             
-            // ★ 지옥 모드면 적 2마리, 아니면 1마리 ★
             const enemyCount = isHardMode ? 2 : 1;
 
             for(let i=0; i<enemyCount; i++) {
@@ -1912,9 +1943,19 @@ function generateProblemBank(grade, semester) {
             document.getElementById('hint-count').innerText = `0`;
             hintsCollected = 0;
             
-            // 데이터가 있으면 쓰고 없으면 빈 배열
-            const deck = generatedBank[subjectName];
-            currentRoomQuizDeck = deck ? shuffle([...deck]) : [];
+            // ★ [문제 리필 로직] 데이터 셔플
+            const subjectKey = `${selectedGrade}-${selectedSemester}-${subjectName}`;
+            let deck = generatedBank[subjectName] || [];
+            
+            // 만약 해당 과목 데이터가 비어있으면(문제 고갈 등), 원본 생성기에서 다시 가져오거나 해야 함.
+            // 하지만 generatedBank는 이미 전체를 들고 있음.
+            // 여기서는 매 방마다 셔플해서 '새로운 덱'처럼 보이게 함.
+            if (deck.length === 0) {
+               // 정말 비었다면 더미 데이터라도 넣어야 에러 안 남
+               deck = [{q: "문제가 없습니다.", o:["O","X"], a:0}];
+            }
+            
+            currentRoomQuizDeck = shuffle([...deck]);
             
             quizBoxes = [];
             spikes = []; 
@@ -1922,7 +1963,6 @@ function generateProblemBank(grade, semester) {
             playerBody.position.set(0, 5, 0);
             playerBody.velocity.set(0,0,0);
             
-            // 적 위치 리셋
             enemyBodies.forEach((body, idx) => {
                 const startX = (idx === 0) ? 40 : -40;
                 body.position.set(startX, 5, 40);
@@ -1933,33 +1973,27 @@ function generateProblemBank(grade, semester) {
         }
 
         function createEnvironment() {
-            // ★ 방 테마 적용 ★
             const themeIndex = isHardMode ? 4 : (currentSubjectIndex % (roomThemes.length - 1)); 
             const theme = roomThemes[themeIndex];
             
             scene.background = new THREE.Color(theme.fog);
-            // [수정] 안개 농도를 대폭 낮춤 (가시거리 확보)
             scene.fog = new THREE.FogExp2(theme.fog, isHardMode ? 0.04 : 0.015);
             
-            // [수정] 환경광 강도 상향
             const ambient = new THREE.AmbientLight(theme.light, 0.7);
             scene.add(ambient);
 
-            // 텍스처 (함수가 있다면)
             const wTex = (typeof window.createWoodTexture === 'function') ? window.createWoodTexture(false) : null;
             const cTex = (typeof window.createWoodTexture === 'function') ? window.createWoodTexture(true) : null;
             
             if(wTex) wTex.repeat.set(20, 20);
             if(cTex) cTex.repeat.set(10, 10);
 
-            // 바닥
             const floorGeo = new THREE.PlaneGeometry(100, 100);
             const floorMat = new THREE.MeshStandardMaterial({ map: wTex, color: theme.wall });
             const floor = new THREE.Mesh(floorGeo, floorMat);
             floor.rotation.x = -Math.PI / 2;
             scene.add(floor);
             
-            // 천장
             const ceilGeo = new THREE.PlaneGeometry(100, 100);
             const ceilMat = new THREE.MeshStandardMaterial({ map: cTex, color: 0x555555 });
             const ceil = new THREE.Mesh(ceilGeo, ceilMat);
@@ -1975,18 +2009,16 @@ function generateProblemBank(grade, semester) {
             floorBody.quaternion.setFromEuler(-Math.PI/2, 0, 0);
             world.addBody(floorBody);
 
-            // ★ 벽 생성 (플레이어 탈출 방지) ★
             const wallThickness = 2;
             const wallHeight = 50;
-            // 앞, 뒤, 좌, 우 벽 (보이지 않게 처리 또는 간단한 메쉬)
             const wallShapeZ = new CANNON.Box(new CANNON.Vec3(50, wallHeight, wallThickness)); 
             const wallShapeX = new CANNON.Box(new CANNON.Vec3(wallThickness, wallHeight, 50)); 
 
             const walls = [
-                { pos: [0, 0, -50], shape: wallShapeZ }, // 앞
-                { pos: [0, 0, 50], shape: wallShapeZ },  // 뒤
-                { pos: [-50, 0, 0], shape: wallShapeX }, // 좌
-                { pos: [50, 0, 0], shape: wallShapeX }   // 우
+                { pos: [0, 0, -50], shape: wallShapeZ },
+                { pos: [0, 0, 50], shape: wallShapeZ },
+                { pos: [-50, 0, 0], shape: wallShapeX },
+                { pos: [50, 0, 0], shape: wallShapeX }
             ];
 
             walls.forEach(w => {
@@ -1999,7 +2031,6 @@ function generateProblemBank(grade, semester) {
                 world.addBody(body);
             });
 
-            // 장애물 (기둥)
             for(let i=0; i<30; i++) { 
                 const x = (Math.random()-0.5) * 80;
                 const z = (Math.random()-0.5) * 80;
@@ -2007,7 +2038,6 @@ function generateProblemBank(grade, semester) {
                 createBox(x, 7.5, z, 3, 15, 3, theme.wall, true, true); 
             }
 
-            // 퀴즈 박스
             for(let i=0; i<15; i++) {
                 const x = (Math.random()-0.5) * 70; 
                 const z = (Math.random()-0.5) * 70;
@@ -2019,7 +2049,6 @@ function generateProblemBank(grade, semester) {
                 quizBoxes.push(mesh);
             }
 
-            // 문 (탈출구)
             const doorGeo = new THREE.BoxGeometry(8, 10, 1);
             const doorMat = new THREE.MeshStandardMaterial({ color: 0x3e2723 });
             doorMesh = new THREE.Mesh(doorGeo, doorMat);
@@ -2100,13 +2129,18 @@ function generateProblemBank(grade, semester) {
 
         function openQuiz(boxMesh) {
             activeQuizBox = boxMesh;
-            const q = currentRoomQuizDeck.pop(); 
+            let q = currentRoomQuizDeck.pop(); 
             
+            // ★ [문제 무한 리필] 덱이 비었으면 다시 섞어서 채움
             if(!q) {
-                // 문제가 떨어지면 임시 문제 생성
-                document.getElementById('quiz-text').innerText = "문제가 부족합니다. 그냥 통과!";
-                solveQuiz(true);
-                return;
+                const subjectName = roomOrder[currentSubjectIndex];
+                let deck = generatedBank[subjectName] || [];
+                if(deck.length > 0) {
+                    currentRoomQuizDeck = shuffle([...deck]);
+                    q = currentRoomQuizDeck.pop();
+                } else {
+                    q = { q: "문제가 없습니다. 보너스!", o: ["O", "X"], a: 0 };
+                }
             }
 
             document.getElementById('quiz-subject').innerText = `[${roomOrder[currentSubjectIndex]}] 문제`;
@@ -2144,9 +2178,17 @@ function generateProblemBank(grade, semester) {
                     playTone(800, 'sine', 0.5); 
                 }
             } else {
-                playTone(100, 'sawtooth', 0.5); 
-                // 틀린 문제는 다시 덱 맨 앞으로 (단, 배열에 다시 넣는 로직 필요)
-                // 여기서는 생략하고 그냥 기회를 잃음 (난이도)
+                // ★ [오답 페널티 구현]
+                playTone(100, 'sawtooth', 0.5); // 틀린 소리
+                playerLives--; 
+                updateLifeUI(); // 목숨 깎고 화면 붉게
+
+                if(playerLives <= 0) {
+                    gameOver("생명력이 모두 다했습니다...");
+                } else {
+                    // 틀린 문제는 다시 덱의 맨 밑으로 보냄 (다음에 또 나오게)
+                    // 현재 activeQuizBox는 그대로 둠 (다시 클릭해서 풀어야 함)
+                }
             }
         }
 
@@ -2155,13 +2197,14 @@ function generateProblemBank(grade, semester) {
             if(currentSubjectIndex >= roomOrder.length) {
                 gameOver("축하합니다! 모든 악몽에서 탈출했습니다!", true);
             } else {
-                // 다음 레벨 로드 전 정리
                 while(scene.children.length > 0){ scene.remove(scene.children[0]); }
                 world.bodies = []; 
                 initThree(); 
                 initPhysics(); 
                 loadRoom(roomOrder[currentSubjectIndex]); 
                 timer += 180; 
+                playerLives = Math.min(playerLives + 1, MAX_LIVES); // 다음 단계 가면 목숨 1개 회복 보너스
+                updateLifeUI();
             }
         }
 
@@ -2248,19 +2291,14 @@ function generateProblemBank(grade, semester) {
                 eBody.velocity.x = dir.x * enemySpeed;
                 eBody.velocity.z = dir.z * enemySpeed;
 
-                // ★ [개선] 적이 끼었는지 확인하고 점프 ★
                 const stuckData = enemyStuckTimers[idx];
                 const moveDist = eBody.position.distanceTo(stuckData.lastPos);
                 
-                // 0.5초마다 위치 확인
                 stuckData.time += dt;
                 if (stuckData.time > 0.5) {
-                    if (moveDist < 0.5) { // 거의 움직이지 않음 -> 끼임!
-                        eBody.velocity.y = 15; // 높이 점프
-                        // 충돌 필터를 잠시 변경하여 장애물(기둥) 통과 가능하게 함
+                    if (moveDist < 0.5) { 
+                        eBody.velocity.y = 15; 
                         eBody.collisionFilterMask = GROUP_PLAYER | GROUP_TERRAIN; 
-                        
-                        // 1초 뒤에 다시 충돌 복구
                         setTimeout(() => {
                             eBody.collisionFilterMask = GROUP_PLAYER | GROUP_TERRAIN | GROUP_OBSTACLE;
                         }, 1000);
@@ -2269,7 +2307,6 @@ function generateProblemBank(grade, semester) {
                     stuckData.time = 0;
                 }
 
-                // 일반 점프 (플레이어가 위에 있거나 가끔)
                 if(playerBody.position.y > eBody.position.y + 2 || Math.random() < 0.005) {
                     if(Math.abs(eBody.velocity.y) < 0.1) {
                         eBody.velocity.y = 10;
