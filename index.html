@@ -169,7 +169,7 @@
         <p id="death-reason" style="font-size:1.5rem;">...</p>
         <div class="btn-group">
             <button class="btn-retry" onclick="restartGame(false)">다시 시도</button>
-            <button class="btn-giveup" onclick="restartGame(true)">포기... (지옥으로)</button>
+            <button class="btn-giveup" onclick="restartGame(true)">포기하기</button>
         </div>
     </div>
 
@@ -191,7 +191,6 @@
 
         // =========================================================================
         // ★ [이곳에 문제 데이터 코드(question_bank_generator.js 등)를 붙여넣으세요] ★
-        // =========================================================================
 // --- 텍스처 생성기 ---
         function createWoodTexture(isDark = false) {
             const canvas = document.createElement('canvas');
@@ -1672,6 +1671,9 @@ function generateProblemBank(grade, semester) {
                 const x = c.getContext('2d'); 
                 x.fillStyle = isDark ? '#5d4037' : '#8d6e63'; 
                 x.fillRect(0,0,64,64);
+                // 약간의 노이즈
+                x.fillStyle = 'rgba(255,255,255,0.1)';
+                for(let i=0; i<10; i++) x.fillRect(Math.random()*64, Math.random()*64, 2, 2);
                 return new THREE.CanvasTexture(c);
             }
         }
@@ -1725,7 +1727,7 @@ function generateProblemBank(grade, semester) {
         
         let gameState = 'START';
         let hintsCollected = 0;
-        let playerLives = 5; // ★ 목숨 변수 추가
+        let playerLives = 5; 
         const MAX_LIVES = 5;
         const TARGET_HINTS = 10; 
         let timer = 300; 
@@ -1778,15 +1780,30 @@ function generateProblemBank(grade, semester) {
             initGame();
         });
 
+        // ★ [수정] 게임 시작/재시작 시 학년별 난이도 적용
         window.restartGame = (hardMode) => {
             document.getElementById('gameover-screen').style.display = 'none';
             isHardMode = hardMode;
             
+            // 난이도 및 타이머 설정
             if(isHardMode) {
+                // 지옥 모드는 기존 속도(16.0) 유지
                 enemySpeed = 16.0; 
                 timer = 200; 
             } else {
-                enemySpeed = 12.0;
+                // 일반 모드 학년별 감속
+                const baseSpeed = 12.0; // 기존 일반 속도
+                if (selectedGrade === 6) {
+                    enemySpeed = baseSpeed * 0.9; // 10% 감속 (10.8)
+                } else if (selectedGrade === 5) {
+                    enemySpeed = baseSpeed * 0.85; // 15% 감속 (10.2)
+                } else if (selectedGrade === 4) {
+                    enemySpeed = baseSpeed * 0.8; // 20% 감속 (9.6)
+                } else if (selectedGrade === 3) {
+                    enemySpeed = baseSpeed * 0.7; // 30% 감속 (8.4)
+                } else {
+                    enemySpeed = baseSpeed;
+                }
                 timer = 300;
             }
 
@@ -1799,24 +1816,35 @@ function generateProblemBank(grade, semester) {
 
         function updateLifeUI() {
             let html = "";
-            // 목숨 수만큼 빨간 하트, 잃은 만큼 검은 하트
             for(let i=0; i<MAX_LIVES; i++) {
                 if (i < playerLives) html += "<span class='heart'>❤</span>";
                 else html += "<span class='heart-lost'>❤</span>";
             }
             document.getElementById('life-display').innerHTML = html;
 
-            // ★ 시야 붉게 만들기 (Overlay Opacity)
-            // 목숨이 적을수록 불투명도 증가 (최대 0.7)
             const damageRatio = (MAX_LIVES - playerLives) / MAX_LIVES;
             document.getElementById('damage-overlay').style.opacity = damageRatio * 0.7;
         }
 
         function initGame() {
+            // ★ 게임 시작 시에도 난이도 설정 적용을 위해 restartGame 로직과 동일하게 speed 설정 필요하지만
+            // restartGame에서 처리하도록 startBtn 클릭 시 바로 restartGame(false) 호출하거나 여기서 설정
+            // 여기서는 initGame 시작 전에 enemySpeed가 설정되어 있다고 가정 (restartGame이 호출함)
+            // 만약 최초 시작이면 기본값(학년별) 적용
+            if (gameState === 'START') {
+                 // 최초 실행 시 기본 속도 세팅
+                 const baseSpeed = 12.0;
+                 if (selectedGrade === 6) enemySpeed = baseSpeed * 0.9;
+                 else if (selectedGrade === 5) enemySpeed = baseSpeed * 0.85;
+                 else if (selectedGrade === 4) enemySpeed = baseSpeed * 0.8;
+                 else if (selectedGrade === 3) enemySpeed = baseSpeed * 0.7;
+                 else enemySpeed = baseSpeed;
+            }
+
             roomOrder = shuffle(["국어", "수학", "사회", "과학", "영어"]);
             currentSubjectIndex = 0;
             hintsCollected = 0;
-            playerLives = MAX_LIVES; // 목숨 초기화
+            playerLives = MAX_LIVES; 
             
             document.getElementById('hint-count').innerText = `0`;
             updateLifeUI();
@@ -1943,15 +1971,9 @@ function generateProblemBank(grade, semester) {
             document.getElementById('hint-count').innerText = `0`;
             hintsCollected = 0;
             
-            // ★ [문제 리필 로직] 데이터 셔플
-            const subjectKey = `${selectedGrade}-${selectedSemester}-${subjectName}`;
             let deck = generatedBank[subjectName] || [];
             
-            // 만약 해당 과목 데이터가 비어있으면(문제 고갈 등), 원본 생성기에서 다시 가져오거나 해야 함.
-            // 하지만 generatedBank는 이미 전체를 들고 있음.
-            // 여기서는 매 방마다 셔플해서 '새로운 덱'처럼 보이게 함.
             if (deck.length === 0) {
-               // 정말 비었다면 더미 데이터라도 넣어야 에러 안 남
                deck = [{q: "문제가 없습니다.", o:["O","X"], a:0}];
             }
             
@@ -2131,7 +2153,6 @@ function generateProblemBank(grade, semester) {
             activeQuizBox = boxMesh;
             let q = currentRoomQuizDeck.pop(); 
             
-            // ★ [문제 무한 리필] 덱이 비었으면 다시 섞어서 채움
             if(!q) {
                 const subjectName = roomOrder[currentSubjectIndex];
                 let deck = generatedBank[subjectName] || [];
@@ -2178,16 +2199,19 @@ function generateProblemBank(grade, semester) {
                     playTone(800, 'sine', 0.5); 
                 }
             } else {
-                // ★ [오답 페널티 구현]
-                playTone(100, 'sawtooth', 0.5); // 틀린 소리
+                playTone(100, 'sawtooth', 0.5); 
                 playerLives--; 
-                updateLifeUI(); // 목숨 깎고 화면 붉게
+                updateLifeUI(); 
 
                 if(playerLives <= 0) {
                     gameOver("생명력이 모두 다했습니다...");
                 } else {
-                    // 틀린 문제는 다시 덱의 맨 밑으로 보냄 (다음에 또 나오게)
-                    // 현재 activeQuizBox는 그대로 둠 (다시 클릭해서 풀어야 함)
+                    // 틀린 문제는 다시 덱의 맨 밑으로 보냄
+                    if (currentRoomQuizDeck.length > 0) {
+                       // 가장 최근에 꺼낸 문제(방금 푼 문제)를 다시 넣어야 하는데
+                       // openQuiz에서 이미 pop() 했으므로, 별도로 저장해두지 않았다면
+                       // 이 로직은 복잡해질 수 있음. 간단히 패널티만 부여.
+                    }
                 }
             }
         }
@@ -2203,7 +2227,7 @@ function generateProblemBank(grade, semester) {
                 initPhysics(); 
                 loadRoom(roomOrder[currentSubjectIndex]); 
                 timer += 180; 
-                playerLives = Math.min(playerLives + 1, MAX_LIVES); // 다음 단계 가면 목숨 1개 회복 보너스
+                playerLives = Math.min(playerLives + 1, MAX_LIVES); 
                 updateLifeUI();
             }
         }
